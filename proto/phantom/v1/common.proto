@@ -37,6 +37,9 @@ message UserLite {
   string user_id = 1;
   string nickname = 2;
   string avatar_url = 3;
+  // 扩展字段：承载后续新增的展示信息（如徽章、认证标识、状态文案等），
+  // 客户端对未识别的 key 忽略处理，避免协议升级引发不兼容
+  map<string, string> ext = 15;
 }
 
 // 错误码分段约定（与 HTTP API 共用一套，详见设计文档第 7 节）:
