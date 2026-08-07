@@ -104,6 +104,7 @@ AuthResp {
   server_time           // 服务端时间，供客户端校准时钟偏移
   max_user_seq          // 服务端当前最新 userSeq，客户端据此判断需要同步多少
   heartbeat_interval_s  // 服务端建议的心跳间隔
+  burn_after_read       // 部署级阅后即焚配置 { enabled, ttl_seconds }，见 9.1
 }
 ```
 
@@ -417,7 +418,7 @@ GET /v1/conversations?cursor=&limit=50
 | `1xxx` | 通用 | `1001 INVALID_PARAM`、`1002 SERVER_ERROR`、`1003 RATE_LIMITED`（通用频控 SEC-13） |
 | `2xxx` | 鉴权/设备 | `2001 TOKEN_EXPIRED`、`2002 TOKEN_REVOKED`、`2003 AUTH_FAILED`、`2004 ACCOUNT_LOCKED`（密码连错锁定）、`2005 DEVICE_LIMIT_EXCEEDED`、`2006 QRCODE_EXPIRED` |
 | `3xxx` | 关系/权限 | `3001 USER_NOT_FOUND`（含隐私不可见/冷静期，统一不区分，AC-16 边界）、`3002 NOT_FRIEND`、`3003 IN_MY_BLACKLIST`、`3004 REJECTED_BY_PEER`（对方拒收，不透露拉黑/注销细节，03 边界）、`3005 FRIEND_LIMIT_EXCEEDED`、`3006 DUPLICATE_APPLY`、`3007 ALREADY_HANDLED`（申请已被他端处理，REL 边界） |
-| `4xxx` | 消息 | `4001 MSG_TOO_LONG`、`4002 CONV_INVALID`（会话失效/群解散）、`4003 RECALL_TIMEOUT`、`4004 ALREADY_RECALLED`、`4005 CONTENT_BLOCKED`（风控拦截，不回显触发词 SEC-12）、`4006 MEDIA_TOO_LARGE` |
+| `4xxx` | 消息 | `4001 MSG_TOO_LONG`、`4002 CONV_INVALID`（会话失效/群解散）、`4003 RECALL_TIMEOUT`、`4004 ALREADY_RECALLED`、`4005 CONTENT_BLOCKED`（风控拦截，不回显触发词 SEC-12）、`4006 MEDIA_TOO_LARGE`、`4007 BURN_MODE_FORBIDDEN`（阅后即焚模式下禁用的能力，9.1） |
 | `5xxx` | 群 | `5001 GROUP_FULL`（GC-02）、`5002 NO_PERMISSION`、`5003 MUTED`（禁言中，带剩余秒数 GC-12）、`5004 GROUP_DISSOLVED`、`5005 MENTION_ALL_RATE_LIMITED`（GC-15）、`5006 NOT_IN_GROUP` |
 | `6xxx` | 风控/合规 | `6001 ACCOUNT_RESTRICTED`（临时限制主动社交，AC 边界）、`6002 ACCOUNT_BANNED`、`6003 MINOR_MODE_FORBIDDEN`（SEC-20） |
 
@@ -477,7 +478,25 @@ sequenceDiagram
 - **非好友消息请求**（SEC-14）：非好友首条消息正常走发送链路，服务端将会话标记 `is_request=true`，接收方同步事件带该标记，客户端归入"消息请求"分区、不计主未读；接收方同意（HTTP `/conversations/{id}/accept`）后转正常会话。
 - **隐私最小披露**：搜索不可见、冷静期、拒收等场景统一返回 `3001/3004` 类模糊错误，不泄露对方具体状态（AC/REL/03 多处边界要求）。
 
-## 10. 协议版本与演进
+### 9.1 阅后即焚（部署级可选能力）
+
+服务启动时配置是否开启阅后即焚及销毁时长，属**部署级全局开关**（非会话/消息级），面向隐私优先的私有化部署场景。
+
+**配置下发**：经 `AuthResp.burn_after_read { enabled, ttl_seconds }` 在每次认证握手时下发，客户端以最近一次握手收到的配置为准；中途变更配置在客户端重连后生效，无需新增指令。
+
+**客户端销毁（各端独立计时）**：
+
+- 消息在本端**实际展示**（进入聊天页可视区）后启动 `ttl_seconds` 倒计时，到期删除本地消息体与已下载的媒体缓存；
+- 各端独立计时：每个设备都拥有完整的一次阅读机会，销毁时刻互不同步；
+- 本地按会话记录已销毁 `msg_id` **墓碑**：漫游回拉（服务端消息体仍保留，见下）命中墓碑的消息不再渲染，避免"焚毁后又回显"；墓碑随会话删除一并清理。
+
+**服务端行为（已确认的取舍）**：
+
+- **消息体保留**：会话 Timeline 不删除，漫游（MD-03）与新设备登录仍可拉到文本内容——本能力定位为"前台不可见"，非服务端抹除；
+- **媒体对象销毁**：媒体文件随消息同步焚毁。以已读回执为代理信号：会话内**全部接收方**的 `read_conv_seq` 越过该消息后，延时 `ttl_seconds + 24h 宽限期` 删除媒体对象（经 MQ 异步清理，见 MQ 架构文档）；始终未被读完的兜底为**发送后 30 天**强制清理。焚毁后漫游拉到的媒体消息展示"媒体已焚毁"占位；
+- **秒传禁用**：阅后即焚模式下禁用 sha256 秒传（媒体上传 `init` 不做去重复用），避免跨消息共享对象被删除波及或泄漏。
+
+**边界**：不防截图/录屏/拍照；`MERGED` 合并转发在该模式下禁用（转发即持久化副本，与焚毁语义矛盾，发送返回 `4007 BURN_MODE_FORBIDDEN`）。
 
 - `Envelope.version` 当前为 1；不兼容变更递增版本，网关按版本路由或返回 `1004 UPGRADE_REQUIRED`。
 - Protobuf 演进遵守：只增不删字段号、废弃字段 `reserved`、枚举首值为 `*_UNSPECIFIED=0`。

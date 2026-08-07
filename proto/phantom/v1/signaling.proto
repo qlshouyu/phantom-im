@@ -24,6 +24,14 @@ message AuthResp {
   int64 server_time = 1;         // 毫秒，供客户端校准时钟偏移
   int64 max_user_seq = 2;        // 客户端据此判断需要 Sync 多少增量
   uint32 heartbeat_interval_s = 3; // 服务端建议心跳间隔（移动端基线 270s）
+  BurnAfterReadConfig burn_after_read = 4; // 部署级阅后即焚配置（设计文档 9.1）
+}
+
+// 阅后即焚配置：服务启动时配置的部署级开关，每次认证握手下发，
+// 客户端以最近一次握手收到的值为准（中途变更重连后生效）
+message BurnAfterReadConfig {
+  bool enabled = 1;
+  uint32 ttl_seconds = 2;  // 本端实际展示消息后，至本地销毁的时长；enabled=false 时无意义
 }
 
 // ---- 心跳（连续 2 个周期无上行判定离线，摘除在线路由）----
