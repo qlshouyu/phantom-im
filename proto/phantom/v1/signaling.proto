@@ -25,6 +25,13 @@ message AuthResp {
   int64 max_user_seq = 2;        // 客户端据此判断需要 Sync 多少增量
   uint32 heartbeat_interval_s = 3; // 服务端建议心跳间隔（移动端基线 270s）
   BurnAfterReadConfig burn_after_read = 4; // 部署级阅后即焚配置（设计文档 9.1）
+  ReadReceiptConfig read_receipt = 5;      // 部署级已读反馈配置（设计文档 4.5）
+}
+
+// 已读反馈配置：部署级开关，服务启动时配置。关闭时服务端不生成对端已读回执
+// （ReadReceiptEvent/ReadReceiptPush）；本人多端未读同步 ReadPositionEvent 不受影响
+message ReadReceiptConfig {
+  bool enabled = 1;
 }
 
 // 阅后即焚配置：服务启动时配置的部署级开关，每次认证握手下发，

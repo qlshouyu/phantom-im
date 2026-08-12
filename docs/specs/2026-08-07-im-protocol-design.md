@@ -105,6 +105,7 @@ AuthResp {
   max_user_seq          // 服务端当前最新 userSeq，客户端据此判断需要同步多少
   heartbeat_interval_s  // 服务端建议的心跳间隔
   burn_after_read       // 部署级阅后即焚配置 { enabled, ttl_seconds }，见 9.1
+  read_receipt          // 部署级已读反馈配置 { enabled }，见 4.5
 }
 ```
 
@@ -277,7 +278,13 @@ MarkReadReq{ conv_id, read_conv_seq }   // "已读至 conv_seq=N"，位置式而
 ```
 
 - 服务端持久化 `(user_id, conv_id) → read_conv_seq`（只允许前进，防状态倒退 MSG-09）。
-- 双向扩散：① 本人其他端收 `ReadPositionEvent` → 未读数清零/减少（MD-07/08）；② 单聊对端收 `ReadReceiptEvent` → 消息置"已读"；群聊聚合为已读人数，对端按需经 HTTP 查询已读列表（03 边界"群聊已读语义"）。
+- 双向扩散之一（**不受开关影响**）：本人其他端收 `ReadPositionEvent` → 未读数清零/减少（MD-07/08）。
+- 双向扩散之二（**对端已读反馈，受部署级开关控制**）：是否生成对端回执由服务启动配置决定，经 `AuthResp.read_receipt { enabled }` 下发（机制同 9.1 阅后即焚）：
+  - **关闭**：服务端不生成 `ReadReceiptEvent` / `ReadReceiptPush`，客户端不展示任何已读状态；
+  - **开启·单聊**：对端收 `ReadReceiptEvent{ reader_id, read_conv_seq }` → 消息置"已读"；
+  - **开启·群聊（逐成员明细）**：任一成员已读位置前进时，服务端向群内成员下发 `ReadReceiptEvent{ reader_id, read_conv_seq }`（群聊同样填 `reader_id`）；客户端维护"成员 → 已读位置"集合，任一消息的已读/未读成员列表 = 按 `read_conv_seq >= 消息 conv_seq` 划分。`read_count` 仍随事件携带，作为气泡角标的快捷聚合值；
+  - **放大抑制**：服务端按 `(conv_id, reader_id)` 做 5 秒窗口合并，窗口内只下发最新位置——500 人群单窗口回执量 ≤ 活跃阅读者数，而非消息数 × 成员数；
+  - **冷启动/补偿**：`GET /conversations/{conv_id}/read-positions` 返回全体成员当前 `read_conv_seq` 快照，进入会话或打开已读明细页时拉取，弥补离线期间被合并掉的中间态。
 - 未读数 = `max(conv_seq) - read_conv_seq`（排除本人发的消息），服务端为权威值；客户端本地计数与 Sync 回包不一致时以服务端为准（CV 边界"未读数兜底"）。
 
 ### 4.6 历史漫游（HTTP）
@@ -364,6 +371,7 @@ ConvDigestResp{ match, diff[] } // 不一致时返回差异项，以服务端为
 | `/groups` | 建群、群资料、成员分页列表、邀请、踢人、退群、转让、管理员、禁言、公告、群名片、二维码/邀请链接、解散 | GC 全系列 |
 | `/conversations` | 会话列表快照（含状态字段）、置顶/免打扰/删除/草稿写入、按 conv_id 建会话 | CV 全系列、07 文档 4.8 |
 | `/conversations/{id}/messages` | 漫游分页（4.6）、会话内搜索（SR-11） | MD-03/04 |
+| `/conversations/{id}/read-positions` | 成员已读位置快照（已读反馈开启时，4.5） | 03 边界"群聊已读语义" |
 | `/search` | 全局搜索（联系人/群/聊天记录三类聚合）、联想 | SR-01~10、SR-14 |
 | `/devices` | 在线设备列表、远程下线 | AC-14、MD-14/15 |
 | `/push` | 推送 Token 注册、通知设置（总开关/预览开关） | NT-06/07、08 文档 |
