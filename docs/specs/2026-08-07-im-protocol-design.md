@@ -108,7 +108,7 @@ AuthResp {
 }
 ```
 
-认证成功后服务端将 `(userId, deviceType, deviceId, connId)` 登记进**多端在线路由表**（07 文档 4.9），并执行在线策略：
+认证成功后服务端将 `(userId, deviceType, deviceId, connId)` 登记进**多端在线路由表**（07 文档 4.9，详细设计见 [MQ 架构文档第 6 节](2026-08-07-im-mq-architecture-design.md)），并执行在线策略：
 
 - **同类型互踢（MD-02）**：同 `device_type` 已有连接时，向旧连接推 `KickPush{ reason=SAME_TYPE_LOGIN }` 后断开。
 - **设备总数上限（MD-18）**：超上限且无同类型可顶替时，`AuthResp` 返回错误码 `2005 DEVICE_LIMIT_EXCEEDED`，拒绝本次连接。
