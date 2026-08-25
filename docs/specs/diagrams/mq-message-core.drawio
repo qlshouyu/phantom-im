@@ -6,11 +6,14 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <!-- 顶部：客户端与网关 -->
-        <mxCell id="cl" value="客户端（iOS / Android / 桌面 / Web）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <!-- 顶部：接入方与网关 -->
+        <mxCell id="cl" value="接入方 App（集成 Phantom IM SDK）&#xa;iOS / Android / 桌面 / Web" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="620" y="40" width="240" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="gw" value="WS 长连接网关集群（无状态）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+        <mxCell id="thirdsvc" value="接入方服务端（平台外）&#xa;本地签发 UserToken（AppSecret）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="40" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="gw" value="WS 长连接网关集群（无状态）&#xa;验签 UserToken（JWT · 多租户）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="620" y="170" width="240" height="70" as="geometry" />
         </mxCell>
 
@@ -21,8 +24,11 @@
         <mxCell id="msgsvc" value="消息服务（同步收单）&#xa;① client_msg_id 幂等检查&#xa;② 分配 conv_seq，落会话 Timeline&#xa;③ 发 RocketMQ 事务消息" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="380" y="310" width="280" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="bizsvc" value="业务服务群&#xa;已读 / 会话状态 / 群 / 关系 / 资料&#xa;产生 10 类 SyncEvent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="bizsvc" value="业务服务群&#xa;已读 / 会话状态 / 群 / 关系（托管可选）/ 资料&#xa;产生 10 类 SyncEvent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="760" y="310" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="openapi" value="OpenAPI 服务（server-to-server）&#xa;用户导入 / 禁用→踢下线 / 资料写入&#xa;应用配置（功能开关 · 秘钥轮换）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="310" width="240" height="110" as="geometry" />
         </mxCell>
 
         <!-- RocketMQ 中间带 -->
@@ -72,7 +78,7 @@
 
         <!-- 图例 -->
         <mxCell id="legend" value="图例" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;verticalAlign=top;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="1260" y="920" width="200" height="160" as="geometry" />
+          <mxGeometry x="1260" y="920" width="200" height="184" as="geometry" />
         </mxCell>
         <mxCell id="leg1" value="" style="rounded=0;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="legend">
           <mxGeometry x="10" y="30" width="30" height="16" as="geometry" />
@@ -104,10 +110,30 @@
         <mxCell id="leg5t" value="死信 / 告警" style="text;html=1;align=left;verticalAlign=middle;" vertex="1" parent="legend">
           <mxGeometry x="50" y="124" width="140" height="20" as="geometry" />
         </mxCell>
+        <mxCell id="leg6" value="" style="rounded=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="legend">
+          <mxGeometry x="10" y="150" width="30" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6t" value="接入方 / 外部系统" style="text;html=1;align=left;verticalAlign=middle;" vertex="1" parent="legend">
+          <mxGeometry x="50" y="148" width="140" height="20" as="geometry" />
+        </mxCell>
 
         <!-- 边 -->
-        <mxCell id="e1" value="WSS · Envelope 帧" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="cl" target="gw">
+        <mxCell id="e1" value="WSS · Envelope 帧&#xa;AuthReq(app_id, user_id, UserToken)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="cl" target="gw">
           <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" value="下发 UserToken（平台外）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="thirdsvc" target="cl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" value="OpenAPI · AppSecret 签名调用" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="thirdsvc" target="openapi">
+          <mxGeometry x="0.5" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" value="用户/配置变更事件入队" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="openapi" target="t2">
+          <mxGeometry x="-0.55" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1192" y="480" />
+              <mxPoint x="285" y="480" />
+            </Array>
+          </mxGeometry>
         </mxCell>
         <mxCell id="e2" value="① SendMsgReq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="gw" target="msgsvc">
           <mxGeometry relative="1" as="geometry" />

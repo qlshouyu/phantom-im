@@ -22,6 +22,8 @@
 
 （源文件：`diagrams/mq-message-core.drawio`，可用 draw.io 打开编辑）
 
+**平台化边界（PRD 01 v0.2）**：客户端即接入方 App（集成 Phantom IM SDK），凭接入方服务端本地签发的 UserToken 接入，网关完成多租户验签（AppSecret 经配置中心缓存于网关）；新增 **OpenAPI 服务**承接 server-to-server 管理面——用户导入、禁用/删除（禁用即时查路由表踢下线）、资料写入、应用配置；其产生的资料/关系/配置变更统一以 SyncEvent 汇入 `TOPIC_SYNC_EVENT`，不另设管理事件 Topic。关系链托管为应用级可选能力，业务服务群按应用配置启停关系校验。
+
 核心思想：**同步链路只做"收单"，其余全部异步化**。发消息的同步闭环仅包含：幂等检查 → 分配 conv_seq → 落会话 Timeline → 发事务消息 → 回 SendMsgResp。之后的写扩散、在线推送、离线推送、搜索索引、风控审计全部由 RocketMQ 驱动的消费组异步完成。
 
 收益：
@@ -34,7 +36,7 @@
 
 ```mermaid
 sequenceDiagram
-    participant C as 客户端
+    participant C as 接入方 App（SDK）
     participant GW as WS 网关
     participant MS as 消息服务
     participant CT as 会话 Timeline 存储
@@ -79,14 +81,15 @@ sequenceDiagram
 | `TOPIC_MSG_EVENT` | 顺序消息，ShardingKey=`conv_id` | 消息服务 | 扇出 / 在线推送 / 离线推送 / 搜索索引 / 风控审计 | tag 区分 `new_msg` / `recall`；事务消息发送 |
 | `TOPIC_SYNC_EVENT` | 普通消息 | 各业务服务（已读/会话状态/群/关系/资料） | 扇出服务 | 10 类 SyncEvent 的统一入口，由扇出服务统一分配 user_seq |
 | `TOPIC_PUSH_RETRY` | 定时消息（5s） | 在线推送服务 | 在线推送服务 | 承接"5 秒未 ACK 重推一次"（协议 3.5），网关无状态化 |
-| `TOPIC_MEDIA_PURGE` | 定时消息 | 消息服务（阅后即焚部署） | 媒体清理服务 | 全部接收方已读后 `ttl+24h` 删除媒体对象；兜底发送后 30 天（协议 9.1） |
+| `TOPIC_MEDIA_PURGE` | 定时消息 | 消息服务（开启阅后即焚的应用） | 媒体清理服务 | 全部接收方已读后 `ttl+24h` 删除媒体对象；兜底发送后 30 天（协议 9.1） |
 | `%DLQ%*`（自动） | 死信 | — | 告警服务 | 重试耗尽进死信 → 告警 + 人工补偿，"不丢"的最后兜底 |
 
 规划原则：
 
 - **user_seq 唯一写入方**：所有需要进入用户同步 Timeline 的事件（消息与 10 类状态事件）统一经 MQ 汇入扇出服务，由它分配 user_seq，杜绝并发写 Timeline 的序号竞态；
 - **顺序消息只用于 `TOPIC_MSG_EVENT`**：状态类事件本身以服务端合并语义（撤回优先、状态取终态）容忍乱序，走普通消息换吞吐；
-- **撤回复用消息通道**：RecallMsg 以 `tag=recall` 进入同一顺序队列，保证同会话内"先消息后撤回"的消费顺序。
+- **撤回复用消息通道**：RecallMsg 以 `tag=recall` 进入同一顺序队列，保证同会话内"先消息后撤回"的消费顺序；
+- **管理面动作不单设 Topic**：OpenAPI 的踢下线是即时同步动作（查路由表→网关 RPC，不经 MQ）；其余用户/配置变更事件统一走 `TOPIC_SYNC_EVENT`，维持"状态类事件统一入口"。
 
 ## 5. 延时重推：网关无状态化
 
@@ -108,7 +111,7 @@ sequenceDiagram
 ┌─ Redis 全局路由表 ────────────────────────────────┐
 │ route:{user_id}  （Hash，按 user_id 做 Cluster 分片）  │
 │   field: MOBILE   → {device_id, conn_id, gateway_id,   │
-│   field: DESKTOP  →  login_time, last_active,          │
+│   field: DESKTOP  →  app_id, login_time, last_active,  │
 │   field: WEB      →  foreground, client_version}       │
 └────────────────────────────────────────────────┘
                   │ gateway_id 定位实例
@@ -136,7 +139,9 @@ sequenceDiagram
 | 实例级清理 | 网关宕机 | 每个网关维护带 TTL 的实例心跳 key（`gateway:{id}`），失联后清理任务扫除该 `gateway_id` 名下所有路由项 |
 | 惰性清理 | 推送时发现 | `last_active` 超时、或目标网关回报 conn 不存在 → 即删该 field 并将本次消息转入离线推送流程 |
 
-**查询方**：在线推送服务（MsgPush/各类 Push）、离线推送服务（NT-01 判定"无在线可达连接"= HGETALL 为空或全部超时）、信令路由（Typing/Presence 找目标端）。
+**查询方**：在线推送服务（MsgPush/各类 Push）、离线推送服务（NT-01 判定"无在线可达连接"= HGETALL 为空或全部超时）、信令路由（Typing/Presence 找目标端）、OpenAPI 服务（禁用/强制下线时踢除全部设备，AC-06/10）。
+
+**多租户说明**：Phantom ID 全局唯一（AC-02，跨应用不冲突），路由表 key 无需 `app_id` 前缀；`app_id` 已在记录值内（登记自 AuthReq），供按应用统计在线与配置路由使用。
 
 ### 6.3 两个刻意的设计选择
 
@@ -174,6 +179,7 @@ sequenceDiagram
 | NT 系列推送 | 离线推送服务独立消费组，决策树独立演进 |
 | SR 系列搜索 | 搜索索引消费组，主链路零侵入 |
 | SEC-06 内容风控 | 风控消费组异步复核，命中发起系统撤回（operator="SYSTEM"） |
+| AC-02~10 平台化管理面 | OpenAPI 服务：用户导入/资料写入经 `TOPIC_SYNC_EVENT` 扇出；禁用/强制下线查路由表即时踢线 |
 
 ## 10. 交付物
 
