@@ -33,7 +33,7 @@ message ReadPositionEvent {
   int64 read_conv_seq = 2;
 }
 
-// 对端已读回执：受部署级开关 AuthResp.read_receipt.enabled 控制，关闭时不生成。
+// 对端已读回执：受应用级开关 AuthResp.read_receipt.enabled 控制，关闭时不生成。
 // 单聊：对方已读位置；群聊：逐成员明细（服务端按 (conv_id, reader_id) 5 秒窗口
 // 合并，只发最新位置），客户端维护"成员→已读位置"集合，据此计算每条消息的
 // 已读/未读成员列表；全量快照经 HTTP GET /conversations/{id}/read-positions 拉取

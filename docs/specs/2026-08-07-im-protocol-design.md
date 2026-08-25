@@ -11,6 +11,7 @@
 | 序列化 | 长连接 Protobuf，HTTP API JSON | 实时通道要效率与强 schema；HTTP 要易用易调试 |
 | 同步模型 | 双 Timeline 混合模型 | 会话 Timeline 存消息体（不放大存储，支撑永久漫游 MD-03）；用户同步 Timeline 存轻量事件（单游标多端补齐 MD-05，状态事件统一时序 MD-07~13）。微信/钉钉同构 |
 | 交付物 | 本文档 + `proto/phantom/v1/*.proto` | 文档定义规则，proto 定义可编译的报文契约 |
+| 产品定位（v0.2） | IM 开发平台（PaaS）：SDK + OpenAPI 对外，无 C 端账号体系 | 用户身份仅 Phantom ID，注册/登录凭证/隐私/注销由接入方用户体系承担；鉴权改为接入方服务端签发 UserToken（PRD 01 v0.2） |
 
 ---
 
@@ -94,18 +95,20 @@ message Envelope {
 
 ```
 AuthReq {
-  access_token          // HTTP 登录换取的短效令牌
+  access_token          // UserToken：接入方服务端用 AppSecret 签发的 JWT（6.2）
   device_id             // 客户端生成并持久化的设备唯一标识
   device_type           // MOBILE / DESKTOP / WEB（MD-01 三类设备）
   platform              // ios / android / windows / macos / web
   client_version
+  app_id                // 应用标识（AC-01），验签与租户路由依据
+  user_id               // Phantom ID，须与 UserToken claims 一致
 }
 AuthResp {
   server_time           // 服务端时间，供客户端校准时钟偏移
   max_user_seq          // 服务端当前最新 userSeq，客户端据此判断需要同步多少
   heartbeat_interval_s  // 服务端建议的心跳间隔
-  burn_after_read       // 部署级阅后即焚配置 { enabled, ttl_seconds }，见 9.1
-  read_receipt          // 部署级已读反馈配置 { enabled }，见 4.5
+  burn_after_read       // 应用级阅后即焚配置 { enabled, ttl_seconds }，见 9.1
+  read_receipt          // 应用级已读反馈配置 { enabled }，见 4.5
 }
 ```
 
@@ -114,7 +117,7 @@ AuthResp {
 - **同类型互踢（MD-02）**：同 `device_type` 已有连接时，向旧连接推 `KickPush{ reason=SAME_TYPE_LOGIN }` 后断开。
 - **设备总数上限（MD-18）**：超上限且无同类型可顶替时，`AuthResp` 返回错误码 `2005 DEVICE_LIMIT_EXCEEDED`，拒绝本次连接。
 
-`KickPush.reason` 枚举：`SAME_TYPE_LOGIN`（同端登录顶替）/ `REMOTE_LOGOUT`（远程下线 MD-15）/ `PASSWORD_CHANGED`（改密强制下线 AC-13）/ `BANNED`（封禁 SEC-08）。收到 `KickPush` 的客户端**不得自动重连**，须回到登录页并展示 reason 对应文案。
+`KickPush.reason` 枚举：`SAME_TYPE_LOGIN`（同端登录顶替）/ `REMOTE_LOGOUT`（远程下线 MD-15 / OpenAPI 强制下线 AC-10）/ `TOKEN_REVOKED`（接入方吊销凭证或禁用用户 AC-06、AppSecret 应急轮换）/ `BANNED`（平台封禁 SEC-08）。收到 `KickPush` 的 SDK **不得自动重连**，须回调宿主 App 并透传 reason，由宿主决定后续（如引导重新获取 UserToken 或退出）。
 
 ### 2.4 心跳与在线判定
 
@@ -279,7 +282,7 @@ MarkReadReq{ conv_id, read_conv_seq }   // "已读至 conv_seq=N"，位置式而
 
 - 服务端持久化 `(user_id, conv_id) → read_conv_seq`（只允许前进，防状态倒退 MSG-09）。
 - 双向扩散之一（**不受开关影响**）：本人其他端收 `ReadPositionEvent` → 未读数清零/减少（MD-07/08）。
-- 双向扩散之二（**对端已读反馈，受部署级开关控制**）：是否生成对端回执由服务启动配置决定，经 `AuthResp.read_receipt { enabled }` 下发（机制同 9.1 阅后即焚）：
+- 双向扩散之二（**对端已读反馈，受应用级开关控制**）：是否生成对端回执由应用配置（控制台，AC-08）决定，经 `AuthResp.read_receipt { enabled }` 下发（机制同 9.1 阅后即焚）：
   - **关闭**：服务端不生成 `ReadReceiptEvent` / `ReadReceiptPush`，客户端不展示任何已读状态；
   - **开启·单聊**：对端收 `ReadReceiptEvent{ reader_id, read_conv_seq }` → 消息置"已读"；
   - **开启·群聊（逐成员明细）**：任一成员已读位置前进时，服务端向群内成员下发 `ReadReceiptEvent{ reader_id, read_conv_seq }`（群聊同样填 `reader_id`）；客户端维护"成员 → 已读位置"集合，任一消息的已读/未读成员列表 = 按 `read_conv_seq >= 消息 conv_seq` 划分。`read_count` 仍随事件携带，作为气泡角标的快捷聚合值；
@@ -349,23 +352,38 @@ ConvDigestResp{ match, diff[] } // 不一致时返回差异项，以服务端为
 ### 6.1 通用约定
 
 - Base：`https://api.phantom.im/v1`，`Content-Type: application/json; charset=utf-8`
-- 认证：`Authorization: Bearer {access_token}`（登录/注册/验证码接口除外）
+- 两类调用方、两套鉴权（6.2）：**SDK 端上 HTTP**（漫游/媒体等）用 `Authorization: Bearer {user_token}`；**OpenAPI**（`/openapi/*`，server-to-server）用 AppSecret 请求签名
 - 统一响应包：`{ "code": 0, "message": "ok", "data": {...} }`，错误码与长连接共用一套（第 7 节）
 - 幂等：所有写操作支持 `X-Idempotency-Key` 头（客户端 UUID），服务端 24h 去重
 - 分页：游标式 `cursor` + `limit`，回包带 `next_cursor` / `has_more`
 
-### 6.2 鉴权与 Token 体系
+### 6.2 平台化鉴权（AppID / AppSecret / UserToken）
 
-- **双 Token**：`access_token`（2 小时，WS 握手与 HTTP 均用）+ `refresh_token`（90 天滚动续期，支撑 AC-17 长期登录态）。
-- `POST /auth/refresh` 用 refresh_token 换新对；refresh_token 每次轮换（旧值立即失效，防重放）。
-- **全端强制下线**（AC-13 改密 / MD-15 远程下线 / SEC-08 封禁）：服务端按 `(user_id, device_id)` 吊销 Token → 在线连接收 `KickPush`，离线设备下次请求收 `2002 TOKEN_REVOKED` 跳登录页。
+平台无 C 端登录（PRD 01 v0.2）。身份三层：开发者 → 应用（AppID/AppSecret）→ 用户（Phantom ID），鉴权分两条链路：
+
+**SDK 用户鉴权（UserToken）**
+
+- UserToken 由**接入方服务端**使用 AppSecret 按规范本地签发（JWT HS256），平台只验签、不回调（AC-03）：
+  ```
+  claims: { app_id, user_id(Phantom ID), iat, exp }   // exp 建议 ≤7 天，强制上限 30 天
+  ```
+- WS 握手（AuthReq）与 SDK 端上 HTTP（漫游、媒体上传等）均用它；验签规则：签名有效、未过期、应用未停用、用户属于该应用且未被禁用。
+- **过期与刷新**：存量长连接不因过期中断，重连时校验；被拒（`2001 TOKEN_EXPIRED`）时 SDK 回调宿主 App 取新 Token 自动重连（AC-04）——平台不提供 refresh 接口，续期能力在接入方。
+- **秘钥轮换**（AC-09）：宽限期（≤7 天）内新旧 AppSecret 双秘钥验签；应急轮换宽限期置 0，全量旧 Token 即刻失效。
+
+**OpenAPI 服务端鉴权（AC-12）**
+
+- `/openapi/*` 为 server-to-server 接口，请求头携 `X-App-Id` + `X-Timestamp` + `X-Signature`（HMAC-SHA256(AppSecret, method+path+body+timestamp)），时间戳偏差 >5 分钟拒绝（防重放），按应用限频。
+
+**强制下线**（AC-06/10 / MD-15 / SEC-08）：接入方经 OpenAPI 禁用用户或强制下线 → 在线连接收 `KickPush`，后续验签拒绝返回 `2002 TOKEN_REVOKED`。
 
 ### 6.3 API 域总表
 
 | 域 | 代表接口 | 覆盖需求 |
 |---|---|---|
-| `/auth` | 发验证码（限频 AC-05）、注册、验证码/密码登录、找回密码、refresh、登出、扫码登录三接口（见 6.5） | AC-01~07、MD-16/17 |
-| `/users` | 我的资料 CRUD、隐私设置、他人资料卡、按 ID/手机号搜索用户（受 AC-12 过滤） | AC-08~12、REL-01/02 |
+| `/openapi/apps` | 应用配置读写（功能开关 AC-08）、AppSecret 轮换（AC-09） | AC-01/08/09 |
+| `/openapi/users` | 创建/导入用户（external_user_id→Phantom ID，幂等 AC-02）、禁用/恢复/删除（AC-06/07）、强制下线（AC-10）、资料写入 | AC-02/05~07/10 |
+| `/users` | （SDK）我的资料读写（可按应用配置禁用写入）、他人资料卡、按 Phantom ID 查询 | AC-05、REL-01 |
 | `/friends` | 申请（发起/列表/通过/拒绝/忽略）、好友列表（增量版本号）、备注、分组、删除 | REL-01~12 |
 | `/blacklist` | 拉黑/解除/列表 | REL-13/14 |
 | `/groups` | 建群、群资料、成员分页列表、邀请、踢人、退群、转让、管理员、禁言、公告、群名片、二维码/邀请链接、解散 | GC 全系列 |
@@ -376,7 +394,7 @@ ConvDigestResp{ match, diff[] } // 不一致时返回差异项，以服务端为
 | `/devices` | 在线设备列表、远程下线 | AC-14、MD-14/15 |
 | `/push` | 推送 Token 注册、通知设置（总开关/预览开关） | NT-06/07、08 文档 |
 | `/report` | 举报（消息/用户/群）、申诉、处理进度 | SEC-01~05、SEC-09 |
-| `/account` | 修改密码、注销申请/撤销、数据导出 | AC-13/16、SEC-16/17 |
+| `/account` | 数据导出（合规） | SEC-16/17 |
 | `/media` | 分片上传三接口（见 6.6） | MSG-03~06 |
 
 > 说明：会话状态写入（置顶等）走 HTTP 而非 WS——它是低频请求-响应操作；写入成功后服务端产生 `ConvStateEvent` 进其他端同步 Timeline，闭环回 WS 通道（07 文档 4.8 的"乐观更新 + 广播"即此路径）。草稿写入客户端 2 秒防抖（07 文档 4.8 步骤 5），带 `edited_at` 时间戳供服务端做"最后编辑获胜"仲裁（CV/07 边界）。
@@ -390,17 +408,9 @@ GET /v1/conversations?cursor=&limit=50
      max_conv_seq, read_conv_seq } ], next_cursor, has_more, max_user_seq }
 ```
 
-### 6.5 扫码登录（MD-16/17）
+### 6.5 扫码登录（已随平台化移除）
 
-```
-1. 桌面端  POST /auth/qrcode              → { qr_token, expires_in: 300 }
-2. 桌面端  GET  /auth/qrcode/{qr_token}   → 长轮询（30s 挂起）状态：PENDING/SCANNED/CONFIRMED/EXPIRED
-3. 手机端  POST /auth/qrcode/{qr_token}/scan     （已登录态）→ 返回待登录设备类型+大致地点
-4. 手机端  POST /auth/qrcode/{qr_token}/confirm  → 服务端置 CONFIRMED 并生成一次性 code
-5. 桌面端  轮询得到 CONFIRMED{ code } → POST /auth/qrcode/exchange{ code } → 换正式双 Token
-```
-
-二维码 5 分钟过期；已扫描未确认同样超时过期。异地扫码时步骤 3 返回体带 `risk_hint` 供手机端标红提示（07 边界）。
+原扫码登录五步协议（MD-16/17）属 C 端产品能力：平台化后登录凭证由接入方体系签发，扫码授权应由接入方在自己的账号体系内实现（授权成功后照常签发 UserToken 交给桌面端 SDK），平台不再提供 `/auth/qrcode` 系列接口。PRD 07 的 MD-16/17 待适配（见 PRD 01 v0.2 变更说明）。
 
 ### 6.6 媒体分片上传（断点续传，03 边界）
 
@@ -424,7 +434,7 @@ GET /v1/conversations?cursor=&limit=50
 |---|---|---|
 | `0` | 成功 | — |
 | `1xxx` | 通用 | `1001 INVALID_PARAM`、`1002 SERVER_ERROR`、`1003 RATE_LIMITED`（通用频控 SEC-13） |
-| `2xxx` | 鉴权/设备 | `2001 TOKEN_EXPIRED`、`2002 TOKEN_REVOKED`、`2003 AUTH_FAILED`、`2004 ACCOUNT_LOCKED`（密码连错锁定）、`2005 DEVICE_LIMIT_EXCEEDED`、`2006 QRCODE_EXPIRED` |
+| `2xxx` | 鉴权/设备 | `2001 TOKEN_EXPIRED`（UserToken 过期，SDK 触发刷新回调）、`2002 TOKEN_REVOKED`（吊销/秘钥应急轮换）、`2003 AUTH_FAILED`（验签失败/AppID 无效）、`2004 USER_DISABLED`（接入方禁用 AC-06）、`2005 DEVICE_LIMIT_EXCEEDED`、`2006`（废弃：原扫码登录 QRCODE_EXPIRED，编号保留） |
 | `3xxx` | 关系/权限 | `3001 USER_NOT_FOUND`（含隐私不可见/冷静期，统一不区分，AC-16 边界）、`3002 NOT_FRIEND`、`3003 IN_MY_BLACKLIST`、`3004 REJECTED_BY_PEER`（对方拒收，不透露拉黑/注销细节，03 边界）、`3005 FRIEND_LIMIT_EXCEEDED`、`3006 DUPLICATE_APPLY`、`3007 ALREADY_HANDLED`（申请已被他端处理，REL 边界） |
 | `4xxx` | 消息 | `4001 MSG_TOO_LONG`、`4002 CONV_INVALID`（会话失效/群解散）、`4003 RECALL_TIMEOUT`、`4004 ALREADY_RECALLED`、`4005 CONTENT_BLOCKED`（风控拦截，不回显触发词 SEC-12）、`4006 MEDIA_TOO_LARGE`、`4007 BURN_MODE_FORBIDDEN`（阅后即焚模式下禁用的能力，9.1） |
 | `5xxx` | 群 | `5001 GROUP_FULL`（GC-02）、`5002 NO_PERMISSION`、`5003 MUTED`（禁言中，带剩余秒数 GC-12）、`5004 GROUP_DISSOLVED`、`5005 MENTION_ALL_RATE_LIMITED`（GC-15）、`5006 NOT_IN_GROUP` |
@@ -486,9 +496,9 @@ sequenceDiagram
 - **非好友消息请求**（SEC-14）：非好友首条消息正常走发送链路，服务端将会话标记 `is_request=true`，接收方同步事件带该标记，客户端归入"消息请求"分区、不计主未读；接收方同意（HTTP `/conversations/{id}/accept`）后转正常会话。
 - **隐私最小披露**：搜索不可见、冷静期、拒收等场景统一返回 `3001/3004` 类模糊错误，不泄露对方具体状态（AC/REL/03 多处边界要求）。
 
-### 9.1 阅后即焚（部署级可选能力）
+### 9.1 阅后即焚（应用级可选能力）
 
-服务启动时配置是否开启阅后即焚及销毁时长，属**部署级全局开关**（非会话/消息级），面向隐私优先的私有化部署场景。
+是否开启阅后即焚及销毁时长为**应用级开关**（控制台配置，AC-08，非会话/消息级），面向隐私优先的应用形态（如私密社交类 App）。
 
 **配置下发**：经 `AuthResp.burn_after_read { enabled, ttl_seconds }` 在每次认证握手时下发，客户端以最近一次握手收到的配置为准；中途变更配置在客户端重连后生效，无需新增指令。
 
@@ -514,7 +524,7 @@ sequenceDiagram
 
 | PRD 功能域 | 协议承接章节 |
 |---|---|
-| 01 账号 | 6.2 鉴权、6.3 `/auth` `/users` `/account`、2.3 KickPush(改密下线) |
+| 01 应用与用户身份（v0.2 平台化） | 6.2 平台化鉴权、6.3 `/openapi/apps` `/openapi/users` `/users`、2.3 AuthReq(app_id/user_id)/KickPush(TOKEN_REVOKED) |
 | 02 关系链 | 6.3 `/friends` `/blacklist`、4.2 RelationEvent、7 错误码 3xxx |
 | 03 消息能力 | 3 全节（模型/状态机/幂等/撤回/转发引用）、6.6 媒体 |
 | 04 单聊 | 3.4 受限投递、5.1 输入状态、5.2 在线状态 |

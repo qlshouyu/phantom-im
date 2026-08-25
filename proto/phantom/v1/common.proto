@@ -33,6 +33,7 @@ enum PresenceStatus {
 }
 
 // 用户资料摘要（会话/消息展示用途）
+// 平台化（PRD 01 v0.2）：资料由接入方经 OpenAPI 或 SDK 写入，user_id 即 Phantom ID
 message UserLite {
   string user_id = 1;
   string nickname = 2;
@@ -45,8 +46,9 @@ message UserLite {
 // 错误码分段约定（与 HTTP API 共用一套，详见设计文档第 7 节）:
 //   0     成功
 //   1xxx  通用: 1001 INVALID_PARAM / 1002 SERVER_ERROR / 1003 RATE_LIMITED / 1004 UPGRADE_REQUIRED
-//   2xxx  鉴权/设备: 2001 TOKEN_EXPIRED / 2002 TOKEN_REVOKED / 2003 AUTH_FAILED
-//         2004 ACCOUNT_LOCKED / 2005 DEVICE_LIMIT_EXCEEDED / 2006 QRCODE_EXPIRED
+//   2xxx  鉴权/设备: 2001 TOKEN_EXPIRED（UserToken 过期）/ 2002 TOKEN_REVOKED（吊销/秘钥应急轮换）
+//         2003 AUTH_FAILED（验签失败/AppID 无效）/ 2004 USER_DISABLED（接入方禁用）
+//         2005 DEVICE_LIMIT_EXCEEDED / 2006 废弃（原扫码登录 QRCODE_EXPIRED，编号保留）
 //   3xxx  关系/权限: 3001 USER_NOT_FOUND / 3002 NOT_FRIEND / 3003 IN_MY_BLACKLIST
 //         3004 REJECTED_BY_PEER / 3005 FRIEND_LIMIT_EXCEEDED / 3006 DUPLICATE_APPLY / 3007 ALREADY_HANDLED
 //   4xxx  消息: 4001 MSG_TOO_LONG / 4002 CONV_INVALID / 4003 RECALL_TIMEOUT

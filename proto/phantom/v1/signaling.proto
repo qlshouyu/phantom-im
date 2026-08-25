@@ -13,28 +13,30 @@ option go_package = "phantom.im/proto/phantom/v1;phantomv1";
 // ---- 认证握手（连接建立后首帧，10 秒未认证服务端断开）----
 
 message AuthReq {
-  string access_token = 1;
+  string access_token = 1;    // UserToken：接入方服务端用 AppSecret 签发的 JWT（设计文档 6.2）
   string device_id = 2;       // 客户端生成并持久化的设备唯一标识
   DeviceType device_type = 3; // 同类型互踢依据（MD-02）
   string platform = 4;        // ios / android / windows / macos / web
   string client_version = 5;
+  string app_id = 6;          // 应用标识（AC-01），验签与租户路由依据
+  string user_id = 7;         // Phantom ID，须与 UserToken claims 一致
 }
 
 message AuthResp {
   int64 server_time = 1;         // 毫秒，供客户端校准时钟偏移
   int64 max_user_seq = 2;        // 客户端据此判断需要 Sync 多少增量
   uint32 heartbeat_interval_s = 3; // 服务端建议心跳间隔（移动端基线 270s）
-  BurnAfterReadConfig burn_after_read = 4; // 部署级阅后即焚配置（设计文档 9.1）
-  ReadReceiptConfig read_receipt = 5;      // 部署级已读反馈配置（设计文档 4.5）
+  BurnAfterReadConfig burn_after_read = 4; // 应用级阅后即焚配置（设计文档 9.1）
+  ReadReceiptConfig read_receipt = 5;      // 应用级已读反馈配置（设计文档 4.5）
 }
 
-// 已读反馈配置：部署级开关，服务启动时配置。关闭时服务端不生成对端已读回执
+// 已读反馈配置：应用级开关（控制台配置 AC-08）。关闭时服务端不生成对端已读回执
 // （ReadReceiptEvent/ReadReceiptPush）；本人多端未读同步 ReadPositionEvent 不受影响
 message ReadReceiptConfig {
   bool enabled = 1;
 }
 
-// 阅后即焚配置：服务启动时配置的部署级开关，每次认证握手下发，
+// 阅后即焚配置：应用级开关（控制台配置 AC-08），每次认证握手下发，
 // 客户端以最近一次握手收到的值为准（中途变更重连后生效）
 message BurnAfterReadConfig {
   bool enabled = 1;
@@ -49,7 +51,7 @@ message Pong {
   int64 server_time = 1;
 }
 
-// ---- 踢下线（收到后不得自动重连，回登录页展示 reason 文案）----
+// ---- 踢下线（SDK 收到后不得自动重连，回调宿主 App 并透传 reason）----
 
 message KickPush {
   KickReason reason = 1;
@@ -58,9 +60,9 @@ message KickPush {
   enum KickReason {
     KICK_REASON_UNSPECIFIED = 0;
     KICK_REASON_SAME_TYPE_LOGIN = 1;   // 同类型设备登录顶替（MD-02）
-    KICK_REASON_REMOTE_LOGOUT = 2;     // 远程下线（MD-15）
-    KICK_REASON_PASSWORD_CHANGED = 3;  // 改密强制下线（AC-13）
-    KICK_REASON_BANNED = 4;            // 封禁（SEC-08）
+    KICK_REASON_REMOTE_LOGOUT = 2;     // 远程下线（MD-15 / OpenAPI 强制下线 AC-10）
+    KICK_REASON_TOKEN_REVOKED = 3;     // 接入方吊销凭证/禁用用户（AC-06）、AppSecret 应急轮换
+    KICK_REASON_BANNED = 4;            // 平台封禁（SEC-08）
   }
 }
 
