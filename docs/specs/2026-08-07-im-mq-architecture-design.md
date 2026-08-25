@@ -3,6 +3,7 @@
 - 日期：2026-08-07
 - 状态：待评审
 - 上游规格：[IM 通讯协议设计](2026-08-07-im-protocol-design.md)（双 Timeline 混合同步模型）
+- 下游规格：[服务端工程结构设计](2026-08-25-server-project-structure-design.md)（Spring Boot 4.x · Maven 多模块 · 可分可合，本文各组件与 module 的对应见其 §6）
 - 需求来源：docs/prd/（MSG / MD / CV / NT / SR / SEC 系列）
 
 ## 0. 设计决策记录
