@@ -1,0 +1,4 @@
+im/phantom/fanout/adapter/MsgEventConsumer.class
+im/phantom/fanout/infra/UserTimelineWriteDao.class
+im/phantom/fanout/app/FanoutService.class
+im/phantom/fanout/FanoutAutoConfiguration.class

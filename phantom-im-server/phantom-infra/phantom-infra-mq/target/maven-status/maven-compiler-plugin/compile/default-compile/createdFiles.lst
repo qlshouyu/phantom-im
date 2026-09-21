@@ -1,0 +1,8 @@
+im/phantom/infra/mq/MqInfraAutoConfiguration.class
+im/phantom/infra/mq/MqConsumers.class
+im/phantom/infra/mq/TransactionChecker.class
+im/phantom/infra/mq/MqProperties.class
+im/phantom/infra/mq/MqMessageHandler.class
+im/phantom/infra/mq/Topics.class
+im/phantom/infra/mq/TxMqProducer.class
+im/phantom/infra/mq/LocalTxWork.class

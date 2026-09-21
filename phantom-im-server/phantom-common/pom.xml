@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>im.phantom</groupId>
+    <artifactId>phantom-im-server</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>phantom-common</artifactId>
+  <description>错误码、ID 生成、conv_id 规则、网关指令 SPI 契约（CommandHandler/SessionContext）、统一异常</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>im.phantom</groupId>
+      <artifactId>phantom-proto</artifactId>
+    </dependency>
+  </dependencies>
+</project>

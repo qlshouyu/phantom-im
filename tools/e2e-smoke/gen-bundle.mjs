@@ -1,0 +1,11 @@
+import protobuf from "protobufjs";
+import path from "node:path"; import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROTO_DIR = path.resolve(__dirname, "../../proto");
+const OUT = path.resolve(__dirname, "../../client/packages/phantom-sdk-web/src/proto-bundle.json");
+const root = new protobuf.Root();
+root.resolvePath = (o, t) => t.startsWith("phantom/") ? path.join(PROTO_DIR, t) : protobuf.util.path.resolve(o, t);
+await root.load(["envelope","common","message","sync","signaling"].map(n=>path.join(PROTO_DIR,`phantom/v1/${n}.proto`)), {keepCase:false});
+fs.writeFileSync(OUT, JSON.stringify(root.toJSON()));
+console.log("wrote", OUT, fs.statSync(OUT).size, "bytes");

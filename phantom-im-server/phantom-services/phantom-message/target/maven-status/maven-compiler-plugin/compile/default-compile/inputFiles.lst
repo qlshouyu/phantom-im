@@ -1,0 +1,5 @@
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-services/phantom-message/src/main/java/im/phantom/message/MessageAutoConfiguration.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-services/phantom-message/src/main/java/im/phantom/message/adapter/SendMsgCommandHandler.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-services/phantom-message/src/main/java/im/phantom/message/app/MessageAppService.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-services/phantom-message/src/main/java/im/phantom/message/infra/ConvTimelineDao.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-services/phantom-message/src/main/java/im/phantom/message/infra/MsgTransactionChecker.java

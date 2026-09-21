@@ -1,0 +1,6 @@
+im/phantom/message/app/MessageAppService.class
+im/phantom/message/MessageAutoConfiguration.class
+im/phantom/message/infra/MsgTransactionChecker.class
+im/phantom/message/infra/ConvTimelineDao.class
+im/phantom/message/infra/ConvTimelineDao$Existing.class
+im/phantom/message/adapter/SendMsgCommandHandler.class

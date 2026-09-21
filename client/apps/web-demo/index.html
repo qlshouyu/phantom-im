@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phantom IM Demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      header { padding: 12px 16px; background: #1e293b; display: flex; gap: 12px; align-items: center; }
+      #status { font-size: 13px; padding: 2px 8px; border-radius: 10px; background: #334155; }
+      #status.online { background: #166534; }
+      #status.reconnecting, #status.authing, #status.connecting { background: #92400e; }
+      #status.closed { background: #7f1d1d; }
+      main { max-width: 680px; margin: 0 auto; padding: 16px; }
+      #messages { min-height: 340px; max-height: 60vh; overflow-y: auto; border: 1px solid #334155;
+        border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .msg { padding: 8px 12px; border-radius: 10px; max-width: 75%; }
+      .msg.self { align-self: flex-end; background: #2563eb; }
+      .msg.peer { align-self: flex-start; background: #334155; }
+      .msg small { display: block; opacity: 0.6; font-size: 11px; margin-top: 2px; }
+      .bar { display: flex; gap: 8px; margin-top: 12px; }
+      input[type=text] { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #334155;
+        background: #0b1220; color: #e2e8f0; }
+      button { padding: 10px 14px; border-radius: 8px; border: 0; background: #2563eb; color: #fff; cursor: pointer; }
+      button.secondary { background: #475569; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Phantom IM</strong>
+      <span id="who"></span>
+      <span id="status" data-testid="status">idle</span>
+      <span style="flex:1"></span>
+      <button id="btn-disconnect" class="secondary" data-testid="disconnect">断开</button>
+      <button id="btn-reconnect" class="secondary" data-testid="reconnect">重连</button>
+    </header>
+    <main>
+      <div id="messages" data-testid="messages"></div>
+      <div class="bar">
+        <input id="input" type="text" placeholder="输入消息…" data-testid="input" />
+        <button id="btn-send" data-testid="send">发送</button>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

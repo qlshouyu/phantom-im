@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>im.phantom</groupId>
+    <artifactId>phantom-im-server</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>phantom-push</artifactId>
+  <description>推送服务：在线推送（查路由下发 MsgPush）。离线推送决策树留待后续里程碑。</description>
+
+  <dependencies>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-common</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-route</artifactId></dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+  </dependencies>
+</project>

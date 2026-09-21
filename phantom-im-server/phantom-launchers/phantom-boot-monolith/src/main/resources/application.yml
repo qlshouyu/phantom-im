@@ -1,0 +1,33 @@
+server:
+  # 8080 被 RocketMQ proxy 占用，服务端口用 18080
+  port: 18080
+
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/phantom_im?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    username: root
+    password: "123456"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      # 联调机 Redis 实际未设密码；如你的 Redis 设了 123456 则填入
+      password: ""
+
+phantom:
+  gateway:
+    id: gw-1
+    heartbeat-interval-s: 270
+    auth-timeout-s: 10
+    app-id: app_demo
+    app-secret: phantom_demo_secret_please_change_0123456789
+  mq:
+    # RocketMQ 5.x gRPC proxy 端点（已发布到宿主 8081；proxy 内部路由 broker）
+    endpoints: 127.0.0.1:8081
+    producer-group: phantom-tx-producer
+
+logging:
+  level:
+    im.phantom: INFO
+    org.apache.rocketmq: WARN

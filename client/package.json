@@ -1,0 +1,10 @@
+{
+  "name": "phantom-client",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Phantom IM 前端 monorepo：JS Web SDK（参考实现）+ Web Demo（e2e）",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}

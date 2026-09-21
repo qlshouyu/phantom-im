@@ -1,0 +1,8 @@
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/LocalTxWork.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/MqConsumers.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/MqInfraAutoConfiguration.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/MqMessageHandler.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/MqProperties.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/Topics.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/TransactionChecker.java
+/Users/egojit/workspace/my_project/phantom-im/phantom-im-server/phantom-infra/phantom-infra-mq/src/main/java/im/phantom/infra/mq/TxMqProducer.java

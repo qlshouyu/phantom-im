@@ -1,0 +1,9 @@
+im/phantom/gateway/ws/GatewayDeliveryServiceImpl.class
+im/phantom/gateway/ws/ConnectionRegistry.class
+im/phantom/gateway/auth/AuthService.class
+im/phantom/gateway/GatewayAutoConfiguration.class
+im/phantom/gateway/GatewayProperties.class
+im/phantom/gateway/ws/CommandDispatcher.class
+im/phantom/gateway/ws/PhantomWsHandler$1.class
+im/phantom/gateway/ws/PhantomWsHandler.class
+im/phantom/gateway/ws/GatewayWebSocketConfig.class

@@ -1,0 +1,5 @@
+im/phantom/sync/adapter/UserSeqQueryImpl.class
+im/phantom/sync/app/SyncAppService.class
+im/phantom/sync/adapter/SyncReqCommandHandler.class
+im/phantom/sync/SyncAutoConfiguration.class
+im/phantom/sync/infra/UserTimelineReadDao.class

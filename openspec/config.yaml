@@ -1,0 +1,60 @@
+schema: spec-driven
+
+context: |
+  产品：Phantom IM —— 全平台通用即时通讯，平台化(PaaS)定位，SDK + OpenAPI 对外，
+  用户身份仅 Phantom ID，鉴权由接入方服务端签发 UserToken(JWT HS256)。
+
+  上游规格（docs/ 下已评审/待评审）：
+    - docs/prd/                                       PRD 10 个功能域 + 路线图
+    - docs/specs/2026-08-07-im-protocol-design.md      通讯协议(WSS+Protobuf / HTTP+JSON / 双 Timeline)
+    - docs/specs/2026-08-07-im-mq-architecture-design.md 消息核心架构(RocketMQ 事务/顺序/延时消息)
+    - docs/specs/2026-08-25-server-project-structure-design.md 服务端工程结构(Maven 多模块·可分可合)
+    - proto/phantom/v1/*.proto                         已写就的报文契约(envelope/common/message/sync/signaling)
+
+  技术栈：Java + Spring Boot 4.x(Spring Framework 7 / Jakarta EE / JDK 21 虚拟线程)、
+    Maven 单一聚合工程(monorepo，每服务一 module)、RocketMQ 5.x、MySQL、Redis、Nacos。
+  部署形态：可分可合，launcher 装配层决定单体/按域拆分/全微服务；本阶段只做单体 phantom-boot-monolith。
+
+  已定的关键技术决策（联调环境）：
+    - MySQL 127.0.0.1:3306 root/123456 —— 会话 Timeline(永久·消息体) + 用户同步 Timeline(30 天滚动)
+    - Redis 127.0.0.1:6379 密码 123456 —— 在线路由表 + conv_seq/user_seq 取号(INCR) + 缓存
+    - 取号安全契约：Redis INCR 快速取号，MySQL 为真相源；Redis 冷启动/恢复时若计数器低于
+      MySQL 已落库 max，须对齐到 max，杜绝序号回退(守住 MSG-15/16 不重不乱序)
+    - RocketMQ 本地已就绪：docs/third/rocketmq/docker-compose.yml
+    - M0 交付正式 JS Web SDK(TypeScript + protobuf.js)，作为其他端 SDK 的参考实现；
+      其余平台 SDK(iOS/Android/桌面)单独立项，实现时参考 JS Web SDK 与 web-sdk spec 契约
+    - M0 另交付 Web IM Demo(消费该 SDK)，承载端到端 e2e 测试
+
+  约定：中文沟通与文档；proto 演进只增不删字段号、枚举首值 *_UNSPECIFIED=0。
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
