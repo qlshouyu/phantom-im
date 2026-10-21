@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 // 端到端：两个浏览器上下文模拟用户 A/B，联合验证 6 份 spec 主场景。
-// 前置：服务端单体运行在 127.0.0.1:18080（RocketMQ/MySQL/Redis 就绪）。
+// 前置：服务端单体运行在 127.0.0.1:28080（RocketMQ/MySQL/Redis 就绪）。
 
 async function online(page: Page) {
   await expect(page.getByTestId("status")).toHaveText("online", { timeout: 15_000 });

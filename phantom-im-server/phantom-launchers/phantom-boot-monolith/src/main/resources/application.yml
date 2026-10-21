@@ -1,6 +1,6 @@
 server:
-  # 8080 被 RocketMQ proxy 占用，服务端口用 18080
-  port: 18080
+  # 8080 被 RocketMQ proxy 占用、18080 被本机 Nacos 容器（经 Lima 转发）占用，服务端口用 28080
+  port: 28080
 
 spring:
   datasource:
@@ -12,8 +12,8 @@ spring:
     redis:
       host: 127.0.0.1
       port: 6379
-      # 联调机 Redis 实际未设密码；如你的 Redis 设了 123456 则填入
-      password: ""
+      # 与 deploy/local/redis.conf 的 requirepass 一致；为空时 Lettuce 握手（HELLO）报 NOAUTH -> Unable to connect
+      password: "123456"
 
 phantom:
   gateway:

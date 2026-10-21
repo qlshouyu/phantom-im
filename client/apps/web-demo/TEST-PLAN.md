@@ -7,7 +7,7 @@ Web Demo 是 `@phantom/sdk-web` 的验证载体。本方案验证 Demo 在真实
 
 ## 1. 前置条件
 
-- 单体服务端运行于 `127.0.0.1:18080`（MySQL/Redis/RocketMQ 就绪，`TOPIC_MSG_EVENT` 已建为 TRANSACTION 类型）。
+- 单体服务端运行于 `127.0.0.1:28080`（MySQL/Redis/RocketMQ 就绪，`TOPIC_MSG_EVENT` 已建为 TRANSACTION 类型）。
 - Vite dev server `127.0.0.1:5173`（Playwright `webServer` 会自动拉起并复用）。
 - 断言锚点（`data-testid`）：`status` / `messages` / `message` / `input` / `send` / `disconnect` / `reconnect`。
 - 运行：`cd client/apps/web-demo && npm run e2e`（默认系统 Chrome `channel: chrome`，免下载浏览器）。

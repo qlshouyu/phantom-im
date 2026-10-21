@@ -2,7 +2,7 @@ import { PhantomClient, singleConvId, type ChatMessage } from "@phantom/sdk-web"
 import { devToken } from "./dev-token";
 
 // M0 单应用联调参数（与服务端 application.yml 一致）
-const WS_URL = "ws://127.0.0.1:18080/ws";
+const WS_URL = "ws://127.0.0.1:28080/ws";
 const APP_ID = "app_demo";
 const APP_SECRET = "phantom_demo_secret_please_change_0123456789";
 

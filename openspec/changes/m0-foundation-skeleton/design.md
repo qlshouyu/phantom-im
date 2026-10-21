@@ -114,6 +114,6 @@ Greenfield，无存量迁移。部署即"起本地栈（RocketMQ+MySQL+Redis）�
 - **复用本机既有服务**：联调机已有 `kuship-mysql`(root/123456，匹配) 与 `kuship-redis`(**实际无密码**，与约定的 123456 不符)。M0 直接复用二者，未另起容器；`deploy/local/` 备有等价 compose 供无既有服务的环境使用。Redis 密码在 `application.yml` 置空并可配置。
 - **RocketMQ 改用 5.x gRPC 客户端（`rocketmq-client-java`）经 proxy `127.0.0.1:8081`**：经典 remoting 客户端从宿主机 JVM 连 broker 会拿到 broker 注册的容器内网地址（`172.21.0.2:10911`）不可达；5.x gRPC 客户端走已发布到宿主的 proxy，由 proxy 内部路由 broker。事务 API 用 `beginTransaction/send(half)/commit|rollback` + `TransactionChecker` 回查，语义与设计一致。
 - **topic 需预建且为 TRANSACTION 类型**：gRPC 生产者启动即拉取 `TOPIC_MSG_EVENT` 路由，须先 `mqadmin updateTopic -t TOPIC_MSG_EVENT -a +message.type=TRANSACTION`（否则 40402 No route）。
-- **端口**：服务端口 18080（8080 被 rmqproxy 占用）。
+- **端口**：服务端口 28080（8080 被 rmqproxy、18080 被本机 Nacos 占用）。
 - **BOM 内联**：`phantom-dependencies` 独立 BOM 为避免 reactor 循环解析，M0 内联于根 pom 的 dependencyManagement（版本治理等效）。
 - **MQ 顺序消息简化**：M0 用并发消费，会话内可观测有序由同步分配的 conv_seq 保证；ShardingKey=conv_id 的严格顺序消费留待后续。
