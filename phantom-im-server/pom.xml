@@ -113,6 +113,26 @@
     </dependencies>
   </dependencyManagement>
 
+  <!-- 项目级默认仓库：阿里云 Maven 镜像（优先于 central 解析依赖与插件） -->
+  <repositories>
+    <repository>
+      <id>aliyun</id>
+      <name>Aliyun Maven Public</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>aliyun-plugin</id>
+      <name>Aliyun Maven Public</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
   <build>
     <extensions>
       <!-- 提供 ${os.detected.classifier} 供 protoc 二进制选型 -->
