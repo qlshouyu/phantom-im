@@ -4,3 +4,5 @@
 .$*.dtmp
 **/.$*.dtmp
 node_modules/
+# 构建产物
+**/target/
