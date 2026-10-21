@@ -1,5 +1,5 @@
 // Phantom IM 通讯协议 - 公共类型
-// 设计文档: docs/specs/2026-08-07-im-protocol-design.md
+// 设计文档: docs/design/2026-08-07-im-protocol-design.md
 syntax = "proto3";
 
 package phantom.v1;

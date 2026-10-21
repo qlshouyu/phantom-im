@@ -1,6 +1,6 @@
 // Phantom IM 通讯协议 - 长连接帧结构与指令集
 // 传输: WebSocket binary 帧，每帧一个 Envelope
-// 设计文档: docs/specs/2026-08-07-im-protocol-design.md 第 2 节
+// 设计文档: docs/design/2026-08-07-im-protocol-design.md 第 2 节
 syntax = "proto3";
 
 package phantom.v1;

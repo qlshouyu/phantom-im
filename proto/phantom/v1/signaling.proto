@@ -1,5 +1,5 @@
 // Phantom IM 通讯协议 - 连接管理与信令（认证/心跳/踢下线/输入状态/在线状态/App 状态）
-// 设计文档: docs/specs/2026-08-07-im-protocol-design.md 第 2、5 节
+// 设计文档: docs/design/2026-08-07-im-protocol-design.md 第 2、5 节
 syntax = "proto3";
 
 package phantom.v1;

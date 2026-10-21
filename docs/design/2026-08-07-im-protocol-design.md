@@ -537,7 +537,7 @@ sequenceDiagram
 
 ## 12. 交付物清单
 
-- 本设计文档：`docs/specs/2026-08-07-im-protocol-design.md`
+- 本设计文档：`docs/design/2026-08-07-im-protocol-design.md`
 - Protobuf 契约（proto3，可直接编译）：
   - `proto/phantom/v1/envelope.proto` — 帧结构与指令枚举
   - `proto/phantom/v1/common.proto` — 公共类型（设备、会话、错误码分段说明）

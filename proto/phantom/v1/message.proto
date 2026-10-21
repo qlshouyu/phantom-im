@@ -1,5 +1,5 @@
 // Phantom IM 通讯协议 - 消息模型与收发/撤回指令
-// 设计文档: docs/specs/2026-08-07-im-protocol-design.md 第 3 节
+// 设计文档: docs/design/2026-08-07-im-protocol-design.md 第 3 节
 syntax = "proto3";
 
 package phantom.v1;
