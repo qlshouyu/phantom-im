@@ -1,11 +1,27 @@
 services:
+  # 一次性初始化：命名卷首次创建时属主为 root，而镜像以 rocketmq(3000) 运行，需先改属主
+  volume-init:
+    image: apache/rocketmq:5.3.2
+    user: root
+    volumes:
+      - namesrv-logs:/v/namesrv-logs
+      - broker-logs:/v/broker-logs
+      - broker-store:/v/broker-store
+    entrypoint: ["sh", "-c", "chown -R 3000:3000 /v"]
+
   namesrv:
     image: apache/rocketmq:5.3.2
     container_name: rmqnamesrv
     ports:
       - "9876:9876"
+    environment:
+      # 默认堆偏大，Lima VM 仅 4G 内存会被 OOM kill，统一调低
+      - JAVA_OPT_EXT=-Xms256m -Xmx256m -Xmn128m
     volumes:
-      - ./data/namesrv/logs:/home/rocketmq/logs
+      - namesrv-logs:/home/rocketmq/logs
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
     networks:
       - rocketmq
     restart: on-failure
@@ -20,12 +36,16 @@ services:
       - "10912:10912"
     environment:
       - NAMESRV_ADDR=rmqnamesrv:9876
+      - JAVA_OPT_EXT=-Xms512m -Xmx512m -Xmn256m -XX:MaxDirectMemorySize=512m
     volumes:
-      - ./data/broker/logs:/home/rocketmq/logs
-      - ./data/broker/store:/home/rocketmq/store
+      - broker-logs:/home/rocketmq/logs
+      - broker-store:/home/rocketmq/store
       - ./conf/broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/broker.conf
     depends_on:
-      - namesrv
+      volume-init:
+        condition: service_completed_successfully
+      namesrv:
+        condition: service_started
     networks:
       - rocketmq
     restart: on-failure
@@ -39,6 +59,7 @@ services:
       - "8081:8081"
     environment:
       - NAMESRV_ADDR=rmqnamesrv:9876
+      - JAVA_OPT_EXT=-Xms256m -Xmx256m -Xmn128m
     depends_on:
       - broker
       - namesrv
@@ -56,13 +77,19 @@ services:
     environment:
       # 控制台在同一 docker 网络内直连 NameServer（进而发现 Broker）
       # 固定内部端口为 8080（新版镜像默认 8082），与端口映射对齐
-      - JAVA_OPTS=-Dserver.port=8080 -Drocketmq.namesrv.addr=rmqnamesrv:9876 -Drocketmq.config.dataPath=/tmp/rocketmq-console/data
+      - JAVA_OPTS=-Dserver.port=8080 -Drocketmq.namesrv.addr=rmqnamesrv:9876 -Drocketmq.config.dataPath=/tmp/rocketmq-console/data -Xms128m -Xmx256m
     depends_on:
       - namesrv
       - proxy
     networks:
       - rocketmq
     restart: on-failure
+
+# 使用命名卷：Lima VM 将 ~ 只读挂载，./data 绑定挂载无法写入
+volumes:
+  namesrv-logs:
+  broker-logs:
+  broker-store:
 
 networks:
   rocketmq:

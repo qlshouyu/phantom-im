@@ -9,9 +9,12 @@ docs/third/rocketmq/
 ├── docker-compose.yml   # 编排文件
 ├── conf/
 │   └── broker.conf      # Broker 配置（外网 IP、刷盘、自动建 Topic 等）
-├── data/                # 首次启动后自动生成（日志与存储持久化，已在 .gitignore 忽略）
 └── README.md
 ```
+
+日志与存储使用 docker 命名卷（`rocketmq_namesrv-logs` / `rocketmq_broker-logs` / `rocketmq_broker-store`），
+而非 `./data` 绑定挂载：Lima VM 将 `~` 只读挂载，绑定挂载无法写入。
+`volume-init` 为一次性服务，启动前把命名卷属主改为镜像运行用户 `rocketmq(3000)`，执行完即退出（`Exited (0)` 属正常）。
 
 ## 组件说明
 
@@ -39,8 +42,8 @@ docker compose logs -f broker
 # 停止
 docker compose down
 
-# 停止并清空数据
-docker compose down && rm -rf ./data
+# 停止并清空数据（删除命名卷）
+docker compose down -v
 ```
 
 ## 客户端接入地址
@@ -83,6 +86,13 @@ brokerIP1 = 192.168.1.100   # 宿主机真实 IP；此模式下 proxy 与 broker
 
 ## 常见问题
 
-- **生产者报 `No route info of this topic`**：确认 Topic 已创建，或 `broker.conf` 中 `autoCreateTopicEnable = true`（生产环境建议关闭并手动创建 Topic）。
+- **生产者报 `No route info of this topic` / `No topic route info in name server for the topic: TOPIC_MSG_EVENT`**：5.x gRPC 客户端经 proxy 取路由，**不会**触发 `autoCreateTopicEnable` 自动建 Topic；且事务消息要求 Topic 声明 `message.type=TRANSACTION`。首次部署（或清空 `broker-store` 卷后）需手动创建：
+
+  ```bash
+  docker exec -e JAVA_OPT_EXT=-Xmx128m rmqbroker sh mqadmin updateTopic -n rmqnamesrv:9876 -c DefaultCluster \
+    -t TOPIC_MSG_EVENT -r 8 -w 8 -a +message.type=TRANSACTION
+  docker exec -e JAVA_OPT_EXT=-Xmx128m rmqbroker sh mqadmin updateSubGroup -n rmqnamesrv:9876 -c DefaultCluster -g phantom-fanout
+  ```
 - **客户端连接超时**：多为 `brokerIP1` 配置为容器内地址或不可达 IP 所致，参见上文跨机部署。
-- **Broker 启动 OOM**：默认 JVM 内存较大，资源受限时可通过 `environment` 追加 `JAVA_OPT_EXT=-server -Xms512m -Xmx512m -Xmn256m` 调低。
+- **进程被 OOM kill / 容器反复重启 / `docker exec` 返回 137**：默认 JVM 堆偏大，Lima VM 仅 4G。compose 已通过 `JAVA_OPT_EXT` 调低各组件堆（namesrv/proxy 256m，broker 512m）；在容器内跑 `mqadmin`、`tools.sh` 时也建议加 `-e JAVA_OPT_EXT=-Xmx128m`。
+- **rmqproxy 首次启动报 `create system broadcast topic DefaultHeartBeatSyncerTopic failed`**：proxy 早于 broker 注册完成启动，`restart: on-failure` 会自动重试，片刻后即恢复。
