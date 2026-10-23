@@ -117,3 +117,4 @@ Greenfield，无存量迁移。部署即"起本地栈（RocketMQ+MySQL+Redis）�
 - **端口**：服务端口 28080（8080 被 rmqproxy、18080 被本机 Nacos 占用）。
 - **BOM 内联**：`phantom-dependencies` 独立 BOM 为避免 reactor 循环解析，M0 内联于根 pom 的 dependencyManagement（版本治理等效）。
 - **MQ 顺序消息简化**：M0 用并发消费，会话内可观测有序由同步分配的 conv_seq 保证；ShardingKey=conv_id 的严格顺序消费留待后续。
+- **验收收口修正（2026-10-23）**：同 `device_type` 的新连接即使 `device_id` 相同（如第二个标签页）也顶替旧连接；SDK 在鉴权失败后不携带旧 Token 自动重试；SDK 持久化按 `conv_id` 组织的本地消息历史，并在服务端回推本人消息时按 `client_msg_id` 合并乐观态，避免双气泡。

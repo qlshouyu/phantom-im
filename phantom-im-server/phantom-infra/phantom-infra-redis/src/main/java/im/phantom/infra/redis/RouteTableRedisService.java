@@ -54,8 +54,9 @@ public class RouteTableRedisService implements RouteTableService {
             return Optional.empty();
         }
         RouteEntry oldEntry = fromJson(old);
-        // deviceId 不同 → 同类型顶替，返回旧记录供调用方踢下线
-        return (oldEntry != null && !oldEntry.deviceId().equals(entry.deviceId()))
+        // 同一 device_type 字段只允许一条在线连接；即使 deviceId 相同（如第二个标签页），
+        // 新连接也应顶替旧连接，返回旧记录供调用方发 KickPush。
+        return (oldEntry != null && !oldEntry.connId().equals(entry.connId()))
                 ? Optional.of(oldEntry) : Optional.empty();
     }
 

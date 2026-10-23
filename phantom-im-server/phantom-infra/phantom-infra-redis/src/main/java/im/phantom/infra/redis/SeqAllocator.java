@@ -62,7 +62,7 @@ public class SeqAllocator {
     }
 
     /** 读取 MySQL 已落库最大序号（不存在则 0）。 */
-    private long watermarkOf(String scope) {
+    long watermarkOf(String scope) {
         Long max = jdbc.query(
                 "SELECT seq FROM seq_watermark WHERE scope = ?",
                 rs -> rs.next() ? rs.getLong(1) : 0L,

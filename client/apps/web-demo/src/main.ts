@@ -9,9 +9,11 @@ const APP_SECRET = "phantom_demo_secret_please_change_0123456789";
 const params = new URLSearchParams(location.search);
 const user = params.get("user") ?? "alice";
 const peer = params.get("peer") ?? (user === "alice" ? "bob" : "alice");
+const device = params.get("device") ?? "1";
+const useExpiredToken = params.get("expired") === "1";
 const userId = "u_" + user;
 const peerId = "u_" + peer;
-const deviceId = "web-" + user;
+const deviceId = "web-" + user + "-" + device;
 const convId = singleConvId(userId, peerId);
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -26,7 +28,8 @@ function renderStatus(s: string) {
 }
 function renderMessage(m: ChatMessage) {
   if (m.convId !== convId) return;
-  const key = "m-" + (m.msgId || m.clientMsgId);
+  // client_msg_id 在发送前后保持不变，作为稳定 DOM key，避免回填 msg_id 后产生双气泡。
+  const key = `m-${m.senderId}-${m.clientMsgId}`;
   let el = document.querySelector<HTMLDivElement>(`[data-key="${key}"]`);
   if (!el) {
     el = document.createElement("div");
@@ -42,11 +45,12 @@ function escapeHtml(s: string) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp
 
 client.on("statechange", renderStatus);
 client.on("message", renderMessage);
-client.on("kicked", (r) => { renderStatus("kicked:" + r); alert("被踢下线: " + r); });
-client.on("tokenExpired", () => alert("Token 过期，需重新获取"));
+let tokenExpired = false;
+client.on("kicked", (r) => renderStatus("kicked:" + r));
+client.on("tokenExpired", () => { tokenExpired = true; renderStatus("token-expired"); });
 
 async function start() {
-  const token = await devToken(APP_ID, userId, APP_SECRET);
+  const token = await devToken(APP_ID, userId, APP_SECRET, useExpiredToken);
   await client.login({ userToken: token, userId, deviceId, deviceType: "WEB" });
   client.getMessages(convId).forEach(renderMessage);
 }
@@ -65,7 +69,7 @@ function send() {
 $("btn-disconnect").addEventListener("click", () => client.logout());
 $("btn-reconnect").addEventListener("click", () => start());
 
-start().catch((e) => { console.error(e); renderStatus("error"); });
+start().catch((e) => { console.error(e); if (!tokenExpired) renderStatus("error"); });
 
 // 暴露给 e2e 调试
 (window as any).__phantom = client;

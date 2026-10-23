@@ -9,7 +9,15 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "protobufjs": "^7.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.4"
   }
 }

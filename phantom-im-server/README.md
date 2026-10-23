@@ -61,12 +61,30 @@ java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 ## 验证
 
 ```bash
-# A) Node 冒烟（最快）
+# 1) Java 单元测试
+cd phantom-im-server && mvn test
+
+# 2) Web SDK 单元测试与类型检查
+cd client && npm test -w @phantom/sdk-web && npm run typecheck -w @phantom/sdk-web
+
+# 3) Node 冒烟（最快）
 cd ../tools/e2e-smoke && npm i && node smoke.mjs
 
-# B) Web Demo + Playwright e2e
+# 4) Web Demo + Playwright e2e
 cd ../client && npm i
 cd apps/web-demo && npx playwright install chromium
 npm run e2e         # 两浏览器上下文：A 发→B 收→B 断→A 发→B 重连 SyncReq 补齐
 npm run dev         # 手动体验：/?user=alice 与 /?user=bob 两个标签页
 ```
+
+### M0 验收结果（2026-10-23）
+
+| 范围 | 命令 | 结果 |
+|---|---|---|
+| Java 单测 | `mvn test` | 14/14 通过 |
+| SDK 单测 | `npm test -w @phantom/sdk-web` | 7/7 通过 |
+| Node 冒烟 | `node smoke.mjs` | 12/12 通过 |
+| Playwright e2e | `npm run e2e` | 4/4 通过 |
+
+冒烟覆盖非法帧、首帧非 AuthReq、认证超时、过期 Token、发送/幂等/断线补齐；
+Playwright 覆盖主链路、多条离线有序、刷新持久化、超长文本失败、Token 过期与同端顶替。

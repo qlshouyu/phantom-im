@@ -7,10 +7,10 @@ function b64url(bytes: Uint8Array): string {
 }
 const enc = (obj: unknown) => b64url(new TextEncoder().encode(JSON.stringify(obj)));
 
-export async function devToken(appId: string, userId: string, secret: string): Promise<string> {
+export async function devToken(appId: string, userId: string, secret: string, expired = false): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "HS256", typ: "JWT" };
-  const payload = { app_id: appId, user_id: userId, iat: now, exp: now + 3600 };
+  const payload = { app_id: appId, user_id: userId, iat: now, exp: now + (expired ? -60 : 3600) };
   const data = `${enc(header)}.${enc(payload)}`;
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);

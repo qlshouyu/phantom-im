@@ -34,6 +34,15 @@ const token = (userId) => jwt.sign({ app_id: APP_ID, user_id: userId }, APP_SECR
 let PASS = 0, FAIL = 0;
 const ok = (c, m) => { if (c) { PASS++; console.log(`  ✅ ${m}`); } else { FAIL++; console.error(`  ❌ ${m}`); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitClose = (ws, timeoutMs = 15_000) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error("等待连接关闭超时")), timeoutMs);
+  ws.once("close", (code, reason) => { clearTimeout(timer); resolve({ code, reason: reason.toString() }); });
+  ws.once("error", () => {});
+});
+const waitOpen = (ws) => new Promise((resolve, reject) => {
+  ws.once("open", resolve);
+  ws.once("error", reject);
+});
 
 // ---- 极简客户端 ----
 class Client {
@@ -71,8 +80,8 @@ class Client {
       this._send(cmd, payload, cid);
     });
   }
-  async auth(deviceId = "dev-" + this.userId) {
-    const payload = Msg.AuthReq.encode({ accessToken: token(this.userId), deviceId,
+  async auth(deviceId = "dev-" + this.userId, accessToken = token(this.userId)) {
+    const payload = Msg.AuthReq.encode({ accessToken, deviceId,
       deviceType: 3 /*WEB*/, platform: "web", clientVersion: "0.1", appId: APP_ID, userId: this.userId }).finish();
     const env = await this.request(CMD.COMMAND_AUTH_REQ, payload);
     return { code: env.code, resp: env.code === 0 ? Msg.AuthResp.decode(env.payload) : null };
@@ -96,10 +105,45 @@ const textOf = (push) => push.msg?.content?.text?.text;
 
 // ---- 场景 ----
 console.log("== Phantom IM M0 端到端冒烟 ==");
-const conv = single("u_alice", "u_bob");
+const runId = Date.now().toString(36);
+const aliceId = `u_alice_${runId}`;
+const bobId = `u_bob_${runId}`;
+const conv = single(aliceId, bobId);
 
-const alice = new Client("u_alice");
-const bob = new Client("u_bob");
+// 0) 连接网关边界（connection-gateway）
+const invalidFrame = new WebSocket(WS_URL);
+await waitOpen(invalidFrame);
+const invalidClosed = waitClose(invalidFrame);
+invalidFrame.send(Buffer.from([0xff, 0x00, 0x01]));
+const invalidClose = await invalidClosed;
+ok(invalidClose.code === 1007, `非法帧断开 code=${invalidClose.code}`);
+
+const nonAuth = new WebSocket(WS_URL);
+await waitOpen(nonAuth);
+const nonAuthClosed = waitClose(nonAuth);
+const badFirstFrame = Envelope.encode({ version: 1, cmd: CMD.COMMAND_PING, cid: 1, code: 0,
+  payload: Msg.Ping.encode({}).finish() }).finish();
+nonAuth.send(badFirstFrame);
+const badFirstClose = await nonAuthClosed;
+ok(badFirstClose.code === 1008, `首帧非 AuthReq 断开 code=${badFirstClose.code}`);
+
+const idle = new WebSocket(WS_URL);
+await waitOpen(idle);
+const idleClose = await waitClose(idle, 12_000);
+const idleClosed = await idleClose;
+ok(idleClosed.code === 1008 && idleClosed.reason.includes("auth timeout"),
+  `认证超时断开 code=${idleClosed.code} reason=${idleClosed.reason}`);
+
+const expiredClient = new Client(`u_expired_${runId}`);
+await expiredClient.connect();
+const expiredToken = jwt.sign({ app_id: APP_ID, user_id: expiredClient.userId }, APP_SECRET,
+  { algorithm: "HS256", expiresIn: -1 });
+const expiredAuth = await expiredClient.auth(`dev-expired-${runId}`, expiredToken);
+ok(expiredAuth.code === 2001, `过期 Token 返回 2001`);
+expiredClient.close();
+
+const alice = new Client(aliceId);
+const bob = new Client(bobId);
 await alice.connect(); await bob.connect();
 
 // 1) 认证（connection-gateway）
@@ -126,14 +170,17 @@ bob.close(); await sleep(500);
 const s3 = await alice.sendText(conv, "offline msg", "cm-2");
 ok(s3.code === 0, `Bob 离线期间 Alice 再发成功 convSeq=${s3.resp?.convSeq}`);
 await sleep(1000);
-const bob2 = new Client("u_bob");
+const bob2 = new Client(bobId);
 await bob2.connect();
 const b2Auth = await bob2.auth();
 ok(b2Auth.code === 0 && Number(b2Auth.resp.maxUserSeq) > bobLastUserSeq,
   `Bob 重连，AuthResp.maxUserSeq=${b2Auth.resp?.maxUserSeq} > 断线前 ${bobLastUserSeq}`);
 const sr = await bob2.sync(bobLastUserSeq);
 const synced = sr.events.find((e) => e.newMessage && e.newMessage.msg?.content?.text?.text === "offline msg");
-ok(!!synced, `SyncReq 补齐到离线消息 "offline msg" (userSeq=${synced?.userSeq})`);
+ok(!!synced, `SyncReq 补齐到离线消息 "offline msg" (userSeq=${synced?.userSeq}, events=${JSON.stringify(sr.events.map((e) => ({
+  userSeq: String(e.userSeq),
+  text: e.newMessage?.msg?.content?.text?.text,
+})))})`);
 
 alice.close(); bob2.close();
 await sleep(300);

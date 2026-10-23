@@ -1,5 +1,5 @@
-> 进度：任务组 1–7（服务端）已实现，`tools/e2e-smoke/smoke.mjs` 端到端验证 8/8 通过
-> （认证/发送/在线投递+ACK/幂等/断线重连 SyncReq 补齐，真实 MySQL+Redis+RocketMQ）。
+> 进度：任务组 1–10 已实现并完成验收收口。最终证据：Java 单测 14/14、SDK 单测 7/7、
+> `tools/e2e-smoke/smoke.mjs` 12/12、Playwright 4/4（真实 MySQL+Redis+RocketMQ）。
 > 落地偏差（已记录于 design/说明）：复用本机既有 MySQL(root/123456)/Redis(无密码)；
 > RocketMQ 改用 5.x gRPC 客户端经 proxy:8081（经典 remoting 客户端从宿主机不可达容器内网 broker）；
 > conv_id 采用可逆排序拼接；phantom-dependencies BOM 内联于根 pom；MQ 顺序消息以 conv_seq 保证可观测有序。
@@ -22,7 +22,7 @@
 
 - [x] 3.1 `alloc_seq.lua`：不存在/低于 hint 时用 MySQL max 对齐后 INCR，稳态裸 INCR
 - [x] 3.2 `SeqAllocator`：进程首次触达 scope 走对齐版（读 `seq_watermark`），之后裸 INCR；`nextConvSeq`/`nextUserSeq`
-- [x] 3.3 冒烟验证 conv_seq/user_seq 严格递增；对齐守卫单测留待补充（回退场景）
+- [x] 3.3 冒烟验证 conv_seq/user_seq 严格递增；`SeqAllocatorTest` 覆盖恢复对齐、稳态续增与 scope 隔离
 
 ## 4. 接入网关（spec: connection-gateway，design D5）
 
@@ -38,20 +38,20 @@
 - [x] 5.2 收单：`(sender_id,client_msg_id)` 幂等 → conv_seq → 落 `conv_timeline` + 同事务推进水位
 - [x] 5.3 事务消息：half→落库→commit；回查以 msg_id 判定；返回 `SendMsgResp`
 - [x] 5.4 TEXT>5000 返回 `4001 MSG_TOO_LONG`
-- [x] 5.5 冒烟验证发送成功 + 重发幂等（msgId/convSeq 不变）；回查 rollback 单测留待补充
+- [x] 5.5 冒烟验证发送成功 + 重发幂等；`MessageAppServiceTest` 覆盖超长拒绝、幂等命中、事务失败不提交，`MsgTransactionCheckerTest` 覆盖回查判定
 
 ## 6. 扇出与在线投递（spec: message-fanout-delivery，design D4）
 
 - [x] 6.1 `phantom-fanout` 消费 `TOPIC_MSG_EVENT`：双方各分配 user_seq 写 `user_timeline`（`(user_id,msg_id)` 幂等）
 - [x] 6.2 `phantom-push`：查路由表下发 `MsgPush{msg,user_seq}`；无在线连接不推
 - [x] 6.3 `MsgAck` 回收：`AckCursorStore` 设备维度记录游标
-- [x] 6.4 冒烟验证单向投递 + 幂等；重复 MsgPush 客户端去重（SDK 侧）
+- [x] 6.4 冒烟验证单向投递 + 幂等；`FanoutServiceTest` 覆盖双向写扩散、重复消费与并发重复插入；SDK 单测覆盖重复 MsgPush 去重
 
 ## 7. 增量同步补齐（spec: sync-catchup）
 
 - [x] 7.1 `phantom-sync` 注册 `SYNC_REQ`：按 `since_user_seq` 升序返回 ≤limit + `max_user_seq` + `has_more`
 - [x] 7.2 同步游标与 ACK 游标同一进度（客户端自带游标，已 ACK 不再下发）
-- [x] 7.3 冒烟验证断线→重连→补齐离线消息；分批/幂等丢弃单测留待补充
+- [x] 7.3 冒烟验证断线→重连→补齐离线消息；`SyncAppServiceTest` 覆盖分批/has_more/limit 上限，SDK 单测覆盖重复事件幂等丢弃
 
 ## 8. 正式 JS Web SDK（spec: web-sdk，design D7）
 
@@ -62,10 +62,18 @@
 - [x] 8.5 接收：`MsgPush` 按 msg_id 去重 + 落本地缓存 + 自动回 `MsgAck` + `message` 事件
 - [x] 8.6 sync-engine：指数退避抖动重连 + 重连后比对 max_user_seq 发 `SyncReq` 循环补齐 + 游标 localStorage 持久化
 - [x] 8.7 `KickPush` → `kicked` 事件不自动重连；store 按 conv_id 缓存（conv_seq 有序、msg_id 去重）+ 事件订阅
-- [x] 8.8 e2e 覆盖发送幂等/重复推送去重/重连补齐；被踢不重连由 SDK 逻辑保证（专项单测留待补充）
+- [x] 8.8 e2e 覆盖发送幂等/重复推送去重/重连补齐；SDK 单测覆盖被踢不重连、指数退避、发送超时重发、同步与本地持久化，7/7 通过
 
 ## 9. Web IM Demo 与端到端 E2E（design D7）
 
 - [x] 9.1 `client/apps/web-demo`：消费 SDK 的最小 IM 前端（登录、单聊收发、连接状态、断开/重连按钮）
-- [x] 9.2 Playwright e2e：两浏览器上下文 A/B → A 发→B 实时收到并 ACK → B 断→A 再发→B 重连 SyncReq 补齐（**1 passed**，系统 Chrome）
-- [x] 9.3 验收证据：`tools/e2e-smoke` 8/8 + Playwright 1/1；`openspec validate m0-foundation-skeleton --strict` 通过
+- [x] 9.2 Playwright e2e：主链路、多条离线有序+刷新持久化、Token 过期、同端顶替共 4 条全部通过（系统 Chrome）
+- [x] 9.3 验收证据：Java 单测 14/14 + SDK 单测 7/7 + `tools/e2e-smoke` 12/12 + Playwright 4/4；`openspec validate m0-foundation-skeleton --strict` 通过
+
+## 10. M0 验收收口（2026-10-23）
+
+- [x] 10.1 补齐 Java 自动化测试：取号恢复、发送幂等与事务回查、扇出幂等、同步分批/has_more，14/14 通过
+- [x] 10.2 补齐 SDK 自动化测试：Token 过期、重复推送、自消息合并、被踢不重连、指数退避、发送超时重发、同步去重与本地持久化，7/7 通过
+- [x] 10.3 扩展真实链路冒烟：非法帧、首帧非 AuthReq、认证超时、过期 Token、发送/幂等/断线补齐，12/12 通过
+- [x] 10.4 扩展 Playwright P0：多条离线有序、刷新不重复、超长文本失败、Token 过期、同端顶替，4/4 通过
+- [x] 10.5 同步验收文档与 OpenSpec 主规格，完成 M0 归档

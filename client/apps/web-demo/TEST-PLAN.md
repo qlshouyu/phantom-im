@@ -17,22 +17,27 @@ Web Demo 是 `@phantom/sdk-web` 的验证载体。本方案验证 Demo 在真实
 | # | 用例 | 对应 spec | 方式 | 现状 |
 |---|---|---|---|---|
 | A1 | 登录成功 → status=online | web-sdk / connection-gateway | e2e | ✅ 已覆盖 |
-| A2 | Token 过期 → 触发 `tokenExpired` | web-sdk | e2e（需造过期 token，小幅扩 demo） | ⬜ 待补 |
-| A3 | 首帧非法 / 认证超时断开 | connection-gateway | 集成（非 demo） | ⬜ 待补 |
+| A2 | Token 过期 → 触发 `tokenExpired` | web-sdk | e2e + smoke | ✅ 已覆盖 |
+| A3 | 首帧非法 / 认证超时断开 | connection-gateway | smoke（非 demo） | ✅ 已覆盖 |
 | B1 | 发文本 → 自身显示 sent + convSeq | single-chat-messaging | e2e | ✅ |
-| B2 | 重发同 clientMsgId → msgId/convSeq 不变（幂等） | single-chat-messaging | SDK 单测（见 §6） | ⬜ 待补 |
-| B3 | 文本 > 5000 → 失败态 | single-chat-messaging | e2e | ⬜ 待补 |
+| B2 | 重发同 clientMsgId → msgId/convSeq 不变（幂等） | single-chat-messaging | smoke + SDK 单测 | ✅ 已覆盖 |
+| B3 | 文本 > 5000 → 失败态 | single-chat-messaging | e2e | ✅ 已覆盖 |
 | C1 | A 发 → B 在线实时收到 | message-fanout-delivery | e2e | ✅ |
-| C2 | 重复推送 → B 端 msgId 去重（列表不重复） | web-sdk / fanout | SDK 单测（见 §6） | ⬜ 待补 |
+| C2 | 重复推送 → B 端 msgId 去重（列表不重复） | web-sdk / fanout | SDK 单测 + Java 单测 | ✅ 已覆盖 |
 | D1 | B 断线 → A 发 → B 重连 SyncReq 补齐 | sync-catchup | e2e | ✅ |
-| D2 | 多条离线消息 → 重连按 user_seq 有序补齐 | sync-catchup | e2e | ⬜ 待补 |
-| D3 | 刷新页面（游标持久化）→ 不重复拉历史 | web-sdk | e2e | ⬜ 待补 |
-| E1 | 同用户第二标签登录 → 旧标签被踢（`kicked`） | connection-gateway | e2e（需小幅扩 demo） | ⬜ 待补 |
-| F1 | 断网自动重连（指数退避） | web-sdk | SDK 单测 / 手动 | ⬜ 待补 |
+| D2 | 多条离线消息 → 重连按 user_seq 有序补齐 | sync-catchup | e2e | ✅ 已覆盖 |
+| D3 | 刷新页面（游标与本地历史持久化）→ 不重复拉历史 | web-sdk | e2e + SDK 单测 | ✅ 已覆盖 |
+| E1 | 同用户第二标签登录 → 旧标签被踢（`kicked`） | connection-gateway | e2e | ✅ 已覆盖 |
+| F1 | 断网自动重连（指数退避） | web-sdk | SDK 单测 | ✅ 已覆盖 |
 
-## 3. 当前 e2e（已通过）
+## 3. 当前 e2e（4/4 已通过）
 
-`tests/e2e.spec.ts` 1 条：**A1 + B1 + C1 + D1** 主链路（在线收发 → 断线 → 离线发 → 重连补齐）。系统 Chrome，`1 passed`。
+- 主链路：**A1 + B1 + C1 + D1**（在线收发 → 断线 → 离线发 → 重连补齐）
+- 多条离线：**B3 + D2 + D3**（超长失败、多条离线有序、刷新后本地历史不重复）
+- 鉴权：**A2** Token 过期进入 `token-expired`
+- 多端：**E1** 同用户第二个 WEB 连接顶替旧连接
+
+系统 Chrome，最终 `4 passed`。
 
 ## 4. 建议补充的 Playwright 用例
 
@@ -67,14 +72,20 @@ e2e 造不出的场景下沉到 **SDK 单测**（Vitest + mock WebSocket）：
 - `onClose` → 指数退避重连时序（F1，用假定时器）
 - 发送 15s 无响应 → 置 `failed`（web-sdk 超时）
 
-服务端侧的幂等 / 事务回查 / 取号回退 → 归 **Java 集成测试**（不经 demo），对应 tasks.md 中标注「留待补充」的单测项：
+服务端侧的幂等 / 事务回查 / 取号回退 → 归 **Java 单测**（不经 demo）：
 - 取号 Redis 丢 key → 对齐到 `MySQL max + 1`，不重发（sequence-allocation 两场景）
 - 落库失败 → 事务回查 rollback（single-chat-messaging）
 - 扇出重复消费 → `(user_id, msg_id)` 幂等（message-fanout-delivery）
 
+当前自动化落点：
+
+- Java：`SeqAllocatorTest`、`MessageAppServiceTest`、`MsgTransactionCheckerTest`、`FanoutServiceTest`、`SyncAppServiceTest`，共 14/14
+- SDK：`client/packages/phantom-sdk-web/test/sdk.test.ts`，共 7/7
+- 网关冒烟：`tools/e2e-smoke/smoke.mjs`，共 12/12
+
 ## 7. 验收标准
 
-- P0 用例（A1 / B1 / C1 / D1 / D2 / D3）全绿 = Demo 可发布。
+- P0 用例（A1 / B1 / C1 / D1 / D2 / D3）全绿 = Demo 可发布；2026-10-23 已全部通过。
 - e2e 无固定 `sleep`，一律用 `expect(...).toHaveCount/toHaveText` 的自动等待（现用例已遵循）。
 - 每条用例自带唯一时间戳后缀文本，避免多次运行的历史消息串扰。
 - CI 用系统 Chrome `channel: 'chrome'`（免下载）或缓存 Playwright 浏览器；服务端与依赖中间件在 CI 前置拉起。

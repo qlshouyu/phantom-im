@@ -58,9 +58,11 @@ export class PhantomClient extends Emitter {
   private store = new Map<string, ChatMessage[]>();
   private seen = new Set<string>();     // msgId 去重
   private cursor = 0;                     // 已应用的最大 user_seq（与自动 ACK 同一进度）
+  private storeUserId?: string;
 
   private state: ConnState = "idle";
   private kicked = false;
+  private authFailed = false;
   private backoff = 1000;
   private hbTimer: any;
 
@@ -77,7 +79,9 @@ export class PhantomClient extends Emitter {
   async login(opts: LoginOptions): Promise<void> {
     this.opts = opts;
     this.kicked = false;
+    this.authFailed = false;
     this.cursor = this.loadCursor(opts.userId);
+    this.loadStore(opts.userId);
     await this.openAndAuth();
   }
 
@@ -94,6 +98,7 @@ export class PhantomClient extends Emitter {
         try {
           const resp = await this.auth();
           if (resp.code !== 0) {
+            this.authFailed = true; // 鉴权失败不携带旧 Token 自动重试，等待宿主换取新 Token
             if (resp.code === 2001) this.emit("tokenExpired"); // TOKEN_EXPIRED → 回调宿主取新 Token
             reject(new Error("auth failed code=" + resp.code));
             try { ws.close(); } catch {}
@@ -114,7 +119,7 @@ export class PhantomClient extends Emitter {
     });
   }
 
-  private async auth() {
+  private async auth(): Promise<any> {
     const o = this.opts!;
     const payload = P.AuthReq.encode({
       accessToken: o.userToken, deviceId: o.deviceId,
@@ -192,10 +197,13 @@ export class PhantomClient extends Emitter {
   private onPush(env: any) {
     const push = P.MsgPush.decode(env.payload) as any;
     const userSeq = Number(push.userSeq);
-    this.applyNewMessage(push.msg);
     // 自动 ACK（web-sdk：接收与自动 ACK）
     this.rawSend(P.Command.COMMAND_MSG_ACK, P.MsgAck.encode({ userSeq }).finish());
-    if (userSeq > this.cursor) { this.cursor = userSeq; this.saveCursor(); }
+    if (userSeq > this.cursor) {
+      this.applyNewMessage(push.msg);
+      this.cursor = userSeq;
+      this.saveCursor();
+    }
   }
 
   private onKick(env: any) {
@@ -212,6 +220,18 @@ export class PhantomClient extends Emitter {
   private applyNewMessage(msg: any) {
     if (!msg || !msg.msgId) return;
     if (this.seen.has(msg.msgId)) return;   // 重复推送/重连竞态幂等丢弃
+    // 自己发送的消息会先以乐观态存在本地；服务端回推时按 client_msg_id 合并，避免双气泡。
+    const existing = this.store.get(msg.convId)?.find((m) => m.clientMsgId === msg.clientMsgId);
+    if (existing) {
+      existing.msgId = msg.msgId;
+      existing.convSeq = Number(msg.convSeq);
+      existing.serverTime = Number(msg.serverTime);
+      existing.state = "sent";
+      this.seen.add(msg.msgId);
+      this.reorder(msg.convId);
+      this.emit("message", existing);
+      return;
+    }
     this.seen.add(msg.msgId);
     const cm: ChatMessage = { msgId: msg.msgId, clientMsgId: msg.clientMsgId, convId: msg.convId,
       senderId: msg.senderId, text: msg.content?.text?.text ?? "",
@@ -243,7 +263,7 @@ export class PhantomClient extends Emitter {
   private onClose() {
     this.stopHeartbeat();
     this.emit("disconnected");
-    if (this.kicked || this.state === "closed") return;
+    if (this.kicked || this.authFailed || this.state === "closed") return;
     this.setState("reconnecting");
     const jitter = this.backoff * (0.7 + Math.random() * 0.6); // ±30%
     setTimeout(() => {
@@ -279,10 +299,12 @@ export class PhantomClient extends Emitter {
   private appendLocal(convId: string, m: ChatMessage) {
     const arr = this.store.get(convId) ?? this.store.set(convId, []).get(convId)!;
     arr.push(m);
+    this.persistStore();
   }
   private reorder(convId: string) {
     const arr = this.store.get(convId);
     if (arr) arr.sort((a, b) => (a.convSeq || 0) - (b.convSeq || 0) || a.serverTime - b.serverTime);
+    this.persistStore();
   }
 
   // ---- 游标持久化 ----
@@ -292,5 +314,35 @@ export class PhantomClient extends Emitter {
   }
   private saveCursor() {
     try { if (this.opts) localStorage.setItem(this.cursorKey(this.opts.userId), String(this.cursor)); } catch {}
+  }
+  private messagesKey(userId: string) { return `phantom.messages.${this.appId}.${userId}`; }
+  private loadStore(userId: string) {
+    if (this.storeUserId === userId) return;
+    this.store.clear();
+    this.seen.clear();
+    this.storeUserId = userId;
+    try {
+      const raw = localStorage.getItem(this.messagesKey(userId));
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Record<string, ChatMessage[]>;
+      for (const [convId, messages] of Object.entries(saved)) {
+        if (!Array.isArray(messages)) continue;
+        const valid = messages
+          .filter((m) => m && m.convId === convId && m.clientMsgId)
+          .map((m) => ({ ...m, state: m.state === "sending" ? "failed" : m.state }));
+        this.store.set(convId, valid);
+        for (const m of valid) if (m.msgId) this.seen.add(m.msgId);
+        this.reorder(convId);
+      }
+    } catch {
+      this.store.clear();
+      this.seen.clear();
+    }
+  }
+  private persistStore() {
+    if (!this.opts || !this.storeUserId) return;
+    try {
+      localStorage.setItem(this.messagesKey(this.storeUserId), JSON.stringify(Object.fromEntries(this.store)));
+    } catch {}
   }
 }
