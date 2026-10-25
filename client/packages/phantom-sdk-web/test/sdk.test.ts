@@ -171,6 +171,29 @@ describe("PhantomClient", () => {
     expect(client.getMessages(convId)[0].msgId).toBe("m_self");
   });
 
+  it("待确认消息保持已确认消息之后", async () => {
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const ws = FakeWebSocket.instances[0];
+    const convId = singleConvId("u_alice", "u_bob");
+    push(ws, 10, msg({ msgId: "m_1", convId, convSeq: 1 }));
+
+    FakeWebSocket.onSend = (socket, env) => {
+      if (env.cmd === P.Command.COMMAND_SEND_MSG_REQ) {
+        response(socket, P.Command.COMMAND_SEND_MSG_RESP, Number(env.cid),
+          P.SendMsgResp.encode({ msgId: "m_2", convSeq: 2, serverTime: 2000 }).finish());
+      }
+    };
+    const pending = client.sendText(convId, "hello");
+
+    expect(client.getMessages(convId).map((item) => item.state)).toEqual(["sent", "sending"]);
+    await pending;
+    expect(client.getMessages(convId).map((item) => item.msgId)).toEqual(["m_1", "m_2"]);
+  });
+
   it("被踢下线后不自动重连", async () => {
     const client = newClient();
     FakeWebSocket.onSend = (ws, env) => {

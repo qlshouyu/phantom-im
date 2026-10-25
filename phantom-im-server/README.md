@@ -54,9 +54,9 @@ java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 - **`txMqProducer` 创建失败：`Expected the service ProducerImpl-0 [FAILED] to be RUNNING`，根因 `No topic route info in name server for the topic: TOPIC_MSG_EVENT`**
   - 原因：RocketMQ 中尚无 `TOPIC_MSG_EVENT`。5.x gRPC 客户端经 proxy 取路由，**不会**触发 broker 的 `autoCreateTopicEnable` 自动建 Topic；且事务消息要求 Topic 声明 `message.type=TRANSACTION`，自动创建的普通 Topic 也无法使用。
   - 处理：执行「一次性准备」第 2 步建 Topic 与消费组，可用 `docker exec rmqbroker sh mqadmin topicRoute -n rmqnamesrv:9876 -t TOPIC_MSG_EVENT` 确认路由已存在，然后重新启动。
-- **服务正常启动，但 Web Demo 报 `WebSocket connection to 'ws://127.0.0.1:28080/ws' failed`**
+- **服务正常启动，但 Web IM 报 `WebSocket connection to 'ws://127.0.0.1:28080/ws' failed`**
   - 原因：端口被其他进程抢占。Docker（Lima）的端口转发绑定在 `127.0.0.1:<port>`，比 Java 的 `*:<port>` 更具体，`127.0.0.1` 的连接会被转发进容器而非本服务（曾遇到 Nacos 容器占用 18080，返回 500 `No static resource ws`）。
-  - 排查：`lsof -nP -iTCP:28080 -sTCP:LISTEN` 应只有本服务的 java 进程；`docker ps --format '{{.Names}}\t{{.Ports}}' | grep 28080` 应为空。若冲突，统一修改 `application.yml` 的 `server.port` 与客户端 `WS_URL`（`client/apps/web-demo/src/main.ts`、`tests/e2e.spec.ts`、`tools/e2e-smoke/smoke.mjs`）。
+  - 排查：`lsof -nP -iTCP:28080 -sTCP:LISTEN` 应只有本服务的 java 进程；`docker ps --format '{{.Names}}\t{{.Ports}}' | grep 28080` 应为空。若冲突，统一修改 `application.yml` 的 `server.port` 与客户端地址（`phantom-im-web-bff/.env.example`、`phantom-im-web-ui/tests/*.spec.ts`、`tools/e2e-smoke/smoke.mjs`）。
 
 ## 验证
 
@@ -70,11 +70,10 @@ cd client && npm test -w @phantom/sdk-web && npm run typecheck -w @phantom/sdk-w
 # 3) Node 冒烟（最快）
 cd ../tools/e2e-smoke && npm i && node smoke.mjs
 
-# 4) Web Demo + Playwright e2e
-cd ../client && npm i
-cd apps/web-demo && npx playwright install chromium
-npm run e2e         # 两浏览器上下文：A 发→B 收→B 断→A 发→B 重连 SyncReq 补齐
-npm run dev         # 手动体验：/?user=alice 与 /?user=bob 两个标签页
+# 4) Web IM + Playwright e2e（先启动 BFF，见 docs/web-im-consumer.md）
+cd ../phantom-im-web-ui && npm i
+npm run e2e         # 真实 Phantom + BFF：注册、好友、单聊、媒体、Token 刷新、重连、顶替
+npm run dev         # 手动体验：http://localhost:5173
 ```
 
 ### M0 验收结果（2026-10-23）

@@ -8,7 +8,9 @@
 ## 项目结构与模块组织
 
 - `phantom-im-server/`：JDK 21 Spring Boot Maven 聚合工程。共享契约位于 `phantom-common` 和 `phantom-service-api`；基础设施 starter 位于 `phantom-infra/*`；业务服务位于 `phantom-services/*`；装配入口位于 `phantom-launchers/phantom-boot-monolith`。
-- `client/`：npm workspace，包含 TypeScript Web SDK（`packages/phantom-sdk-web`）以及 Vite/Playwright 演示应用（`apps/web-demo`）。
+- `client/`：npm workspace，包含 TypeScript Web SDK（`packages/phantom-sdk-web`）及管理端应用。
+- `phantom-im-web-bff/`：独立 Spring Boot 4 Maven 工程，提供 Web IM 注册登录、Redis Session、UserToken 与 Phantom HTTP 代理。
+- `phantom-im-web-ui/`：独立 npm 工程，React + TypeScript + Vite Web IM，通过本地文件依赖消费 `@phantom/sdk-web`。
 - `proto/phantom/v1/`：Java 与 JS 共用的通信契约源文件；`docs/` 存放 PRD 与设计，`openspec/` 存放变更规格，`deploy/local/` 存放本地基础设施，`tools/e2e-smoke/` 存放冒烟测试客户端。
 
 ## 构建、测试与开发命令
@@ -24,9 +26,9 @@ docker compose -f docs/third/rocketmq/docker-compose.yml up -d
 cd phantom-im-server && mvn -DskipTests package
 java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 
-# Web 演示应用
-cd client && npm install
-cd client/apps/web-demo && npm run dev
+# Web IM（先按 docs/web-im-consumer.md 配置 BFF）
+cd phantom-im-web-ui && npm install
+npm run dev
 npm run build
 npm run e2e
 
@@ -45,9 +47,9 @@ cd tools/e2e-smoke && npm install && node smoke.mjs
 
 ## 测试指南
 
-- Playwright 测试位于 `client/apps/web-demo/tests/*.spec.ts`，名称应描述具体行为；运行前须启动单体服务与中间件。
+- Playwright 测试位于 `phantom-im-web-ui/tests/*.spec.ts`，名称应描述具体行为；运行前须启动 Phantom 单体、BFF 与中间件。
 - `tools/e2e-smoke/smoke.mjs` 验证认证、投递、幂等和重连同步。
-- 当前尚无 Java 测试套件和覆盖率门槛。后续 JUnit 测试应放在各模块 `src/test/java` 下，镜像生产包结构，并以 `*Test.java` 命名。
+- JUnit 测试放在各 Maven 工程 `src/test/java` 下，镜像生产包结构，并以 `*Test.java` 命名；BFF 已配置 JUnit/Mockito/MockMvc 测试套件。
 - 使用能覆盖改动的最小测试范围；未实际运行的测试或覆盖率不得对外声称。
 
 ## 提交与拉取请求规范
@@ -58,4 +60,4 @@ cd tools/e2e-smoke && npm install && node smoke.mjs
 
 ## 架构与配置说明
 
-业务服务模块保持独立，通过启动器与自动装配层进行组合。修改端口或客户端端点时，需同步更新服务端配置、Web 演示应用、Playwright 测试和冒烟测试客户端。
+业务服务模块保持独立，通过启动器与自动装配层进行组合。修改端口或客户端端点时，需同步更新服务端配置、`phantom-im-web-bff/`、`phantom-im-web-ui/`、Playwright 测试和冒烟测试客户端。

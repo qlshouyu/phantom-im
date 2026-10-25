@@ -54,6 +54,15 @@ export interface ChatMessage {
   burnAfterReadTtlSeconds: number;
 }
 
+function compareMessages(a: ChatMessage, b: ChatMessage): number {
+  const aPending = !Number.isFinite(a.convSeq) || a.convSeq <= 0;
+  const bPending = !Number.isFinite(b.convSeq) || b.convSeq <= 0;
+  if (aPending !== bPending) return aPending ? 1 : -1;
+  return (a.convSeq || 0) - (b.convSeq || 0)
+    || a.serverTime - b.serverTime
+    || (a.clientMsgId || a.msgId).localeCompare(b.clientMsgId || b.msgId);
+}
+
 export interface MediaUploadOptions {
   fileName: string;
   sizeBytes: number;
@@ -936,7 +945,7 @@ export class PhantomClient extends Emitter {
   }
   private reorder(convId: string): void {
     const messages = this.messages.get(convId);
-    if (messages) messages.sort((a, b) => (a.convSeq || 0) - (b.convSeq || 0) || a.serverTime - b.serverTime);
+    if (messages) messages.sort(compareMessages);
     this.persistStore();
   }
 

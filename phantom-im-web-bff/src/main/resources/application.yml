@@ -1,0 +1,71 @@
+server:
+  port: ${WEB_IM_BFF_PORT:28090}
+  servlet:
+    session:
+      timeout: 7d
+      cookie:
+        name: PHANTOM_WEB_IM_SESSION
+        http-only: true
+        secure: ${WEB_IM_COOKIE_SECURE:false}
+        same-site: lax
+        path: /
+
+spring:
+  application:
+    name: phantom-im-web-bff
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
+  datasource:
+    url: ${WEB_IM_DB_URL:jdbc:mysql://127.0.0.1:3306/phantom_web_im?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true}
+    username: ${WEB_IM_DB_USERNAME:phantom_web_im}
+    password: ${WEB_IM_DB_PASSWORD:phantom_web_im_dev}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 1
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  data:
+    redis:
+      host: ${WEB_IM_REDIS_HOST:127.0.0.1}
+      port: ${WEB_IM_REDIS_PORT:6379}
+      password: ${WEB_IM_REDIS_PASSWORD:123456}
+      database: 1
+      timeout: 2s
+  web:
+    resources:
+      static-locations: ${WEB_IM_UI_DIST:file:../phantom-im-web-ui/dist/}
+  session:
+    store-type: redis
+    timeout: 7d
+    data:
+      redis:
+        namespace: "phantom:web-im:session"
+
+phantom:
+  web-im:
+    app-id: ${PHANTOM_WEB_IM_APP_ID}
+    app-secret: ${PHANTOM_WEB_IM_APP_SECRET}
+    phantom-http-url: ${PHANTOM_HTTP_URL:http://127.0.0.1:28080}
+    phantom-ws-url: ${PHANTOM_WS_URL:ws://127.0.0.1:28080/ws}
+    proxy-base-url: /api/phantom
+    token-ttl: 15m
+    test-mode: ${WEB_IM_TEST_MODE:false}
+    secure-cookie: ${WEB_IM_COOKIE_SECURE:false}
+    allowed-origins: ${WEB_IM_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:28090,http://127.0.0.1:28090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    im.phantom.web: INFO
