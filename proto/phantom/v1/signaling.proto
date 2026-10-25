@@ -28,6 +28,14 @@ message AuthResp {
   uint32 heartbeat_interval_s = 3; // 服务端建议心跳间隔（移动端基线 270s）
   BurnAfterReadConfig burn_after_read = 4; // 应用级阅后即焚配置（设计文档 9.1）
   ReadReceiptConfig read_receipt = 5;      // 应用级已读反馈配置（设计文档 4.5）
+  AppFeatureConfig app_features = 6;       // 关系链、资料写入和设备策略（AC-08）
+}
+
+// 应用级功能与设备策略。认证时下发，客户端以最近一次握手值为准。
+message AppFeatureConfig {
+  bool relation_hosted = 1;          // false 时平台不校验好友关系
+  bool sdk_profile_write_enabled = 2; // 是否允许 SDK 写入资料
+  uint32 max_devices = 3;            // 单账号在线设备上限
 }
 
 // 已读反馈配置：应用级开关（控制台配置 AC-08）。关闭时服务端不生成对端已读回执

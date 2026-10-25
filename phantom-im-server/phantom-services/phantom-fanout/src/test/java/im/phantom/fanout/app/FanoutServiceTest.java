@@ -16,6 +16,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.util.stream.IntStream;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -95,5 +97,26 @@ class FanoutServiceTest {
         service.onNewMessage(message);
 
         verify(delivery, never()).deliver(anyString(), any());
+    }
+
+    @Test
+    void fansOutOneGroupMessageToFiveHundredMembersWithoutDuplicates() {
+        String groupConv = ConvIds.group("g500");
+        var members = IntStream.range(0, 500).mapToObj(i -> "u" + i).toList();
+        when(dao.listParticipants(groupConv)).thenReturn(members);
+        when(dao.exists(anyString(), eq("m_group"))).thenReturn(false);
+        when(seqAllocator.nextUserSeq(anyString())).thenReturn(1L);
+        when(delivery.deliver(anyString(), any())).thenReturn(1);
+        Msg groupMessage = message.toBuilder().setMsgId("m_group").setConvId(groupConv)
+                .setConvType(ConvType.CONV_TYPE_GROUP).setSenderId("u0").build();
+
+        long started = System.nanoTime();
+        service.onNewMessage(groupMessage);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        verify(dao, org.mockito.Mockito.times(500)).insert(anyString(), anyLong(), anyInt(),
+                eq("m_group"), any(byte[].class), anyLong());
+        verify(delivery, org.mockito.Mockito.times(500)).deliver(anyString(), any());
+        org.assertj.core.api.Assertions.assertThat(elapsedMs).isLessThan(5_000L);
     }
 }

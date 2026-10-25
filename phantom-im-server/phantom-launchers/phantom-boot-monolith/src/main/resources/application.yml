@@ -3,6 +3,8 @@ server:
   port: 28080
 
 spring:
+  jackson:
+    property-naming-strategy: SNAKE_CASE
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/phantom_im?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: root
@@ -26,6 +28,37 @@ phantom:
     # RocketMQ 5.x gRPC proxy 端点（已发布到宿主 8081；proxy 内部路由 broker）
     endpoints: 127.0.0.1:8081
     producer-group: phantom-tx-producer
+  openapi:
+    security:
+      # 本地单体使用 demo 应用作为 OpenAPI bootstrap；生产由配置中心覆盖。
+      bootstrap-app-id: app_demo
+      bootstrap-secret: phantom_demo_secret_please_change_0123456789
+  media:
+    local-root: ${java.io.tmpdir}/phantom-media
+    tool-root: ${PHANTOM_MEDIA_TOOL_ROOT:${java.io.tmpdir}/phantom-media-tools}
+    ffmpeg-resource-root: ffmpeg
+    ffmpeg-version: bundled-v1
+    ffmpeg-enabled: true
+    ffmpeg-timeout-seconds: 20
+  risk:
+    blocked-keywords:
+      - 违禁词
+    strict-mode: false
+
+management:
+  metrics:
+    tags:
+      application: phantom-im
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
 
 logging:
   level:

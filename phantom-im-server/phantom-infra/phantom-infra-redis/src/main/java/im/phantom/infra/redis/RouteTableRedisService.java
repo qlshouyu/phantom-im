@@ -91,6 +91,22 @@ public class RouteTableRedisService implements RouteTableService {
     }
 
     @Override
+    public void updateForeground(String userId, int deviceType, String connId, boolean foreground, long now) {
+        String field = String.valueOf(deviceType);
+        String json = (String) redis.opsForHash().get(key(userId), field);
+        if (json == null) {
+            return;
+        }
+        RouteEntry current = fromJson(json);
+        if (current == null || !current.connId().equals(connId)) {
+            return;
+        }
+        redis.opsForHash().put(key(userId), field, toJson(new RouteEntry(current.userId(),
+                current.deviceType(), current.deviceId(), current.connId(), current.gatewayId(),
+                current.appId(), now, foreground)));
+    }
+
+    @Override
     public List<RouteEntry> query(String userId) {
         Map<Object, Object> all = redis.opsForHash().entries(key(userId));
         long now = System.currentTimeMillis();

@@ -3,6 +3,7 @@ package im.phantom.infra.mq;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import im.phantom.infra.observability.PlatformMetrics;
 
 /**
  * MQ 基础设施装配：MqProperties + 消费者工厂。
@@ -14,7 +15,12 @@ import org.springframework.context.annotation.Bean;
 public class MqInfraAutoConfiguration {
 
     @Bean(destroyMethod = "close")
-    public MqConsumers mqConsumers(MqProperties props) {
-        return new MqConsumers(props);
+    public MqConsumers mqConsumers(MqProperties props, PlatformMetrics metrics) {
+        return new MqConsumers(props, metrics);
+    }
+
+    @Bean(destroyMethod = "close")
+    public EventPublisher eventPublisher(MqProperties props) {
+        return new RocketMqEventPublisher(props);
     }
 }

@@ -28,6 +28,7 @@
     <mysql.version>9.1.0</mysql.version>
     <protobuf-plugin.version>0.6.1</protobuf-plugin.version>
     <os-plugin.version>1.7.1</os-plugin.version>
+    <mockito.version>5.20.0</mockito.version>
   </properties>
 
   <modules>
@@ -36,12 +37,29 @@
     <module>phantom-infra/phantom-infra-db</module>
     <module>phantom-infra/phantom-infra-redis</module>
     <module>phantom-infra/phantom-infra-mq</module>
+    <module>phantom-infra/phantom-infra-observability</module>
     <module>phantom-service-api/phantom-api-route</module>
+    <module>phantom-service-api/phantom-api-user</module>
+    <module>phantom-service-api/phantom-api-config</module>
+    <module>phantom-service-api/phantom-api-conversation</module>
+    <module>phantom-service-api/phantom-api-message</module>
+    <module>phantom-service-api/phantom-api-relation</module>
+    <module>phantom-service-api/phantom-api-group</module>
+    <module>phantom-service-api/phantom-api-device</module>
+    <module>phantom-service-api/phantom-api-sync</module>
     <module>phantom-services/phantom-gateway</module>
     <module>phantom-services/phantom-message</module>
     <module>phantom-services/phantom-fanout</module>
     <module>phantom-services/phantom-push</module>
     <module>phantom-services/phantom-sync</module>
+    <module>phantom-services/phantom-user</module>
+    <module>phantom-services/phantom-openapi</module>
+    <module>phantom-services/phantom-relation</module>
+    <module>phantom-services/phantom-conversation</module>
+    <module>phantom-services/phantom-group</module>
+    <module>phantom-services/phantom-media</module>
+    <module>phantom-services/phantom-search</module>
+    <module>phantom-services/phantom-risk</module>
     <module>phantom-launchers/phantom-boot-monolith</module>
   </modules>
 
@@ -104,12 +122,29 @@
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-db</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-redis</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-mq</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-observability</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-route</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-user</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-config</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-conversation</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-message</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-relation</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-group</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-device</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-sync</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-gateway</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-message</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-fanout</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-push</artifactId><version>${project.version}</version></dependency>
       <dependency><groupId>im.phantom</groupId><artifactId>phantom-sync</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-user</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-openapi</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-relation</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-conversation</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-group</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-media</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-search</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>im.phantom</groupId><artifactId>phantom-risk</artifactId><version>${project.version}</version></dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -153,6 +188,15 @@
     </extensions>
     <pluginManagement>
       <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.5.4</version>
+          <configuration>
+            <!-- JDK 21 禁止 Mockito 运行时自附加时，通过显式 agent 启动 MockMaker。 -->
+            <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+          </configuration>
+        </plugin>
         <plugin>
           <groupId>org.xolstice.maven.plugins</groupId>
           <artifactId>protobuf-maven-plugin</artifactId>

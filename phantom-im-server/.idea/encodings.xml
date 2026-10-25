@@ -7,25 +7,61 @@
     <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-db/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-mq/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-mq/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-observability/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-observability/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-redis/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-infra/phantom-infra-redis/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-launchers/phantom-boot-monolith/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-launchers/phantom-boot-monolith/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-proto/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-proto/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-config/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-config/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-conversation/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-conversation/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-device/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-device/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-group/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-group/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-message/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-message/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-relation/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-relation/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-route/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-route/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-sync/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-sync/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-user/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-service-api/phantom-api-user/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-conversation/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-conversation/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-fanout/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-fanout/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-gateway/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-gateway/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-group/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-group/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-media/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-media/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-message/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-message/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-openapi/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-openapi/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-push/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-push/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-relation/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-relation/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-risk/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-risk/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-search/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-search/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-sync/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/phantom-services/phantom-sync/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-user/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/phantom-services/phantom-user/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file:///src/main/java" charset="UTF-8" />
+    <file url="file:///src/main/resources" charset="UTF-8" />
   </component>
 </project>

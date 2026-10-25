@@ -2,6 +2,13 @@
   "name": "phantom-e2e-smoke",
   "private": true,
   "type": "module",
+  "scripts": {
+    "smoke": "node smoke.mjs",
+    "security": "node security-smoke.mjs",
+    "resilience": "node resilience-smoke.mjs",
+    "capacity": "node capacity-smoke.mjs",
+    "release-rehearsal": "node release-rehearsal.mjs"
+  },
   "dependencies": {
     "protobufjs": "^7.4.0",
     "ws": "^8.18.0",

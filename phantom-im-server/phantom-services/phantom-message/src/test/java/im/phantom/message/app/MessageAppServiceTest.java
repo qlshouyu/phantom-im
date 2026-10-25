@@ -1,13 +1,18 @@
 package im.phantom.message.app;
 
+import im.phantom.api.relation.RelationService;
 import im.phantom.common.BizException;
 import im.phantom.common.ConvIds;
 import im.phantom.common.ErrorCodes;
+import im.phantom.common.risk.ContentModerationProvider;
+import im.phantom.common.risk.ModerationDecision;
+import im.phantom.common.risk.ModerationRequest;
 import im.phantom.infra.mq.TxMqProducer;
 import im.phantom.infra.redis.SeqAllocator;
 import im.phantom.message.infra.ConvTimelineDao;
 import im.phantom.proto.v1.ConvType;
 import im.phantom.proto.v1.MsgContent;
+import im.phantom.proto.v1.Msg;
 import im.phantom.proto.v1.MsgType;
 import im.phantom.proto.v1.SendMsgReq;
 import im.phantom.proto.v1.SendMsgResp;
@@ -18,13 +23,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +53,12 @@ class MessageAppServiceTest {
     private SeqAllocator seqAllocator;
     @Mock
     private TxMqProducer producer;
+    @Mock
+    private ObjectProvider<RelationService> relationServices;
+    @Mock
+    private RelationService relationService;
+    @Mock
+    private ObjectProvider<ContentModerationProvider> moderationProviders;
 
     private MessageAppService service;
 
@@ -104,6 +123,70 @@ class MessageAppServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).code())
                 .isEqualTo(ErrorCodes.SERVER_ERROR);
+    }
+
+    @Test
+    void blacklistPolicyRejectsMessageBeforeAllocatingSequence() throws Exception {
+        when(relationServices.getIfAvailable()).thenReturn(relationService);
+        doThrow(new BizException(ErrorCodes.REJECTED_BY_PEER, "对方拒绝接收消息"))
+                .when(relationService).authorizeDirectMessage("app1", SENDER, "u_bob");
+        MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer, relationServices,
+                null, null, null, null, null);
+
+        assertThatThrownBy(() -> guarded.handleSend("app1", SENDER, request("c-blocked", "hello")))
+                .isInstanceOf(BizException.class)
+                .extracting(error -> ((BizException) error).code())
+                .isEqualTo(ErrorCodes.REJECTED_BY_PEER);
+        verify(seqAllocator, never()).nextConvSeq(anyString());
+        verify(producer, never()).sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void expiredBurnAfterReadHistoryReturnsTombstoneWithoutContent() {
+        Msg expired = Msg.newBuilder().setMsgId("m_burn").setClientMsgId("c_burn")
+                .setConvId(CONV).setConvType(ConvType.CONV_TYPE_SINGLE).setSenderId(SENDER)
+                .setMsgType(MsgType.MSG_TYPE_TEXT)
+                .setContent(MsgContent.newBuilder().setText(TextContent.newBuilder().setText("secret")))
+                .setConvSeq(1).setServerTime(System.currentTimeMillis() - 10_000)
+                .setBurnAfterReadTtlSeconds(1).build();
+        when(dao.historyForUser(SENDER, CONV, Long.MAX_VALUE, 51)).thenReturn(List.of(expired));
+
+        var page = service.history(SENDER, CONV, 0, 50);
+
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.contentJson()).isEqualTo("{}");
+            assertThat(item.burnAfterReadTtlSeconds()).isEqualTo(1);
+        });
+    }
+
+    @Test
+    void asyncReviewBlocksSuspiciousMediaAndTriggersSystemRecall() throws Exception {
+        CountDownLatch reviewed = new CountDownLatch(1);
+        ContentModerationProvider provider = new ContentModerationProvider() {
+            @Override public ModerationDecision moderate(ModerationRequest request) {
+                return ModerationDecision.review("image.review");
+            }
+            @Override public Optional<ModerationDecision> review(ModerationRequest request) {
+                reviewed.countDown();
+                return Optional.of(ModerationDecision.block("image.rejected"));
+            }
+        };
+        when(moderationProviders.getIfAvailable()).thenReturn(provider);
+        MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer,
+                null, null, null, null, moderationProviders, null);
+        when(dao.findByClientMsgId(SENDER, "c-review")).thenReturn(null);
+        when(seqAllocator.nextConvSeq(CONV)).thenReturn(11L);
+        when(producer.sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                .thenReturn(true);
+        when(dao.findByMsgId(anyString())).thenAnswer(invocation -> Msg.newBuilder()
+                .setMsgId(invocation.getArgument(0)).setConvId(CONV)
+                .setSenderId(SENDER).setServerTime(1000).build());
+        when(dao.markRecalled(any(), anyLong())).thenReturn(true);
+
+        guarded.handleSend("app", SENDER, request("c-review", "image"));
+
+        assertThat(reviewed.await(3, TimeUnit.SECONDS)).isTrue();
+        verify(dao, org.mockito.Mockito.timeout(3000)).markRecalled(any(), anyLong());
     }
 
     private SendMsgReq request(String clientMsgId, String text) {

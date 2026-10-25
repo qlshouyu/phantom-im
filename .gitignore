@@ -6,3 +6,9 @@
 node_modules/
 # 构建产物
 **/target/
+**/ffmpeg-tools.zip
+**/src/main/resources/ffmpeg/**/.download/
+
+# 测试产物
+**/test-results/
+**/playwright-report/

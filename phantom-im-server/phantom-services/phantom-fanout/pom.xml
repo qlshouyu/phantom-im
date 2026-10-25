@@ -16,12 +16,18 @@
   <dependencies>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-common</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-route</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-sync</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-db</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-redis</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-mq</artifactId></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

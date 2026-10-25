@@ -22,5 +22,9 @@
       <groupId>org.apache.rocketmq</groupId>
       <artifactId>rocketmq-client-java</artifactId>
     </dependency>
+    <dependency>
+      <groupId>im.phantom</groupId>
+      <artifactId>phantom-infra-observability</artifactId>
+    </dependency>
   </dependencies>
 </project>

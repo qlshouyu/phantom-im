@@ -1,11 +1,20 @@
-// Phantom IM 官方 JS Web SDK（M0 参考实现）。
-// 对应 openspec/.../specs/web-sdk/spec.md —— 同时作为其他端 SDK 的行为契约。
+// Phantom IM 官方 JS Web SDK（MVP 参考实现）。
+// WSS+Protobuf 负责实时指令/推送/同步；HTTP+JSON 负责 CRUD、漫游、搜索、媒体和设备。
 import * as P from "./proto";
 
 export { singleConvId } from "./proto";
 
 export type DeviceType = "MOBILE" | "DESKTOP" | "WEB";
 const DEVICE_TYPE_VALUE: Record<DeviceType, number> = { MOBILE: 1, DESKTOP: 2, WEB: 3 };
+const CONV_TYPE_VALUE = { SINGLE: 1, GROUP: 2 } as const;
+const MSG_TYPE_VALUE: Record<MessageKind, number> = {
+  TEXT: 1, EMOJI: 2, IMAGE: 3, VOICE: 4, VIDEO: 5, FILE: 6,
+  LOCATION: 7, CARD: 8, MERGED: 9, SYSTEM: 10,
+};
+
+export type MessageKind = "TEXT" | "EMOJI" | "IMAGE" | "VOICE" | "VIDEO" | "FILE" |
+  "LOCATION" | "CARD" | "MERGED" | "SYSTEM";
+export type MessageState = "sending" | "sent" | "delivered" | "read" | "failed" | "recalled" | "burned";
 
 export interface LoginOptions {
   userToken: string;
@@ -14,190 +23,588 @@ export interface LoginOptions {
   deviceType?: DeviceType;
 }
 
+export interface SendMessageInput {
+  convId: string;
+  convType?: "SINGLE" | "GROUP";
+  kind?: MessageKind;
+  content: Record<string, unknown>;
+  replyToMsgId?: string;
+  mentions?: string[];
+  clientMsgId?: string;
+}
+
 export interface ChatMessage {
   msgId: string;
   clientMsgId: string;
   convId: string;
+  convType: "SINGLE" | "GROUP";
   senderId: string;
+  kind: MessageKind;
+  content: Record<string, any>;
   text: string;
   convSeq: number;
   serverTime: number;
-  state: "sending" | "sent" | "failed";
+  state: MessageState;
+  recalled: boolean;
+  restricted: boolean;
+  isRequest: boolean;
+  replyToMsgId?: string;
+  replySnapshot?: Record<string, any>;
+  mentions: string[];
+  burnAfterReadTtlSeconds: number;
 }
 
-type Events = {
+export interface MediaUploadOptions {
+  fileName: string;
+  sizeBytes: number;
+  sha256: string;
+  mimeType: string;
+  mediaType: "IMAGE" | "VOICE" | "VIDEO" | "FILE";
+  durationSeconds?: number;
+  width?: number;
+  height?: number;
+  burnAfterRead?: boolean;
+  burnAfterReadTtlSeconds?: number;
+  signal?: AbortSignal;
+  onProgress?: (uploadedBytes: number, totalBytes: number) => void;
+}
+
+export interface UploadSession {
+  uploadId: string;
+  partSize: number;
+  sizeBytes: number;
+  totalParts: number;
+  uploadedParts: number[];
+  instant: boolean;
+  mediaId?: string;
+  url?: string;
+  thumbUrl?: string;
+}
+
+type ConnState = "idle" | "connecting" | "authing" | "online" | "reconnecting" | "closed";
+type EventMap = {
   connected: () => void;
   disconnected: () => void;
   message: (m: ChatMessage) => void;
   kicked: (reason: string) => void;
   tokenExpired: () => void;
   statechange: (s: ConnState) => void;
+  sync: (event: any) => void;
+  relation: (event: any) => void;
+  conversation: (event: any) => void;
+  group: (event: any) => void;
+  profile: (event: any) => void;
+  presence: (event: any) => void;
+  typing: (event: any) => void;
+  notificationClick: (data: Record<string, string>) => void;
 };
-type ConnState = "idle" | "connecting" | "authing" | "online" | "reconnecting" | "closed";
 
 const SEND_TIMEOUT_MS = 15_000;
-const HEARTBEAT_MS = 25_000; // 演示用较短心跳
+const HEARTBEAT_MS = 25_000;
 const MAX_BACKOFF_MS = 60_000;
+const CACHE_VERSION = 3;
 
-/** 极简事件发射器。 */
 class Emitter {
   private map = new Map<string, Function[]>();
-  on<K extends keyof Events>(e: K, fn: Events[K]) { (this.map.get(e) ?? this.map.set(e, []).get(e)!).push(fn); return this; }
-  emit<K extends keyof Events>(e: K, ...a: Parameters<Events[K]>) { (this.map.get(e) ?? []).forEach((f) => (f as any)(...a)); }
+  on<K extends keyof EventMap>(event: K, fn: EventMap[K]): this {
+    const handlers = this.map.get(event) ?? [];
+    handlers.push(fn);
+    this.map.set(event, handlers);
+    return this;
+  }
+  off<K extends keyof EventMap>(event: K, fn: EventMap[K]): this {
+    this.map.set(event, (this.map.get(event) ?? []).filter((item) => item !== fn));
+    return this;
+  }
+  emit<K extends keyof EventMap>(event: K, ...args: Parameters<EventMap[K]>): void {
+    for (const handler of this.map.get(event) ?? []) (handler as any)(...args);
+  }
 }
 
 export class PhantomClient extends Emitter {
-  private url: string;
-  private appId: string;
+  private readonly wsUrl: string;
+  private readonly httpBaseUrl: string;
+  private readonly appId: string;
+  private readonly fetchImpl: typeof fetch;
   private ws?: WebSocket;
   private opts?: LoginOptions;
-
   private cid = 0;
   private pending = new Map<number, { resolve: (e: any) => void; reject: (err: any) => void; timer: any }>();
-
-  private store = new Map<string, ChatMessage[]>();
-  private seen = new Set<string>();     // msgId 去重
-  private cursor = 0;                     // 已应用的最大 user_seq（与自动 ACK 同一进度）
+  private messages = new Map<string, ChatMessage[]>();
+  private conversations = new Map<string, any>();
+  private locallyDeleted = new Set<string>();
+  private seen = new Set<string>();
+  private cursor = 0;
   private storeUserId?: string;
-
   private state: ConnState = "idle";
   private kicked = false;
   private authFailed = false;
   private backoff = 1000;
   private hbTimer: any;
+  private appConfig?: Record<string, any>;
+  private searchSequence = 0;
+  private searchTimer: any;
 
-  constructor(options: { url: string; appId: string }) {
+  constructor(options: { url: string; appId: string; httpBaseUrl?: string; fetch?: typeof fetch }) {
     super();
-    this.url = options.url;
+    this.wsUrl = options.url;
     this.appId = options.appId;
+    this.httpBaseUrl = options.httpBaseUrl ?? options.url.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
+    this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  getState() { return this.state; }
-  getMessages(convId: string): ChatMessage[] { return this.store.get(convId) ?? []; }
+  getState(): ConnState { return this.state; }
+  getCurrentUserId(): string | undefined { return this.opts?.userId; }
+  getAppConfig(): Record<string, any> | undefined { return this.appConfig; }
+  getMessages(convId: string): ChatMessage[] { return [...(this.messages.get(convId) ?? [])]; }
 
-  /** 连接并认证（connection-gateway / web-sdk：连接与登录）。 */
-  async login(opts: LoginOptions): Promise<void> {
-    this.opts = opts;
+  async login(options: LoginOptions): Promise<void> {
+    this.opts = options;
     this.kicked = false;
     this.authFailed = false;
-    this.cursor = this.loadCursor(opts.userId);
-    this.loadStore(opts.userId);
+    this.cursor = this.loadCursor(options.userId);
+    this.loadStore(options.userId);
     await this.openAndAuth();
   }
 
-  private setState(s: ConnState) { this.state = s; this.emit("statechange", s); }
+  private setState(state: ConnState): void { this.state = state; this.emit("statechange", state); }
 
   private openAndAuth(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.setState(this.state === "reconnecting" ? "reconnecting" : "connecting");
-      const ws = new WebSocket(this.url);
+      const ws = new WebSocket(this.wsUrl);
       ws.binaryType = "arraybuffer";
       this.ws = ws;
       ws.onopen = async () => {
         this.setState("authing");
         try {
-          const resp = await this.auth();
-          if (resp.code !== 0) {
-            this.authFailed = true; // 鉴权失败不携带旧 Token 自动重试，等待宿主换取新 Token
-            if (resp.code === 2001) this.emit("tokenExpired"); // TOKEN_EXPIRED → 回调宿主取新 Token
-            reject(new Error("auth failed code=" + resp.code));
-            try { ws.close(); } catch {}
+          const response = await this.auth();
+          if (response.code !== 0) {
+            this.authFailed = true;
+            if (response.code === 2001) this.emit("tokenExpired");
+            reject(new Error("auth failed code=" + response.code));
+            try { ws.close(); } catch { /* noop */ }
             return;
           }
+          this.appConfig = response.appConfig;
           this.backoff = 1000;
           this.setState("online");
           this.emit("connected");
           this.startHeartbeat();
-          const max = Number(resp.maxUserSeq || 0);
-          if (max > this.cursor) await this.syncLoop();  // 落后则增量补齐
+          if (Number(response.maxUserSeq || 0) > this.cursor) await this.syncLoop();
+          else if (this.cursor === 0) {
+            try { await this.fullResync(); }
+            catch { this.emit("conversation", { type: "SNAPSHOT_UNAVAILABLE" }); }
+          }
           resolve();
-        } catch (e) { reject(e); }
+        } catch (error) { reject(error); }
       };
-      ws.onmessage = (ev) => this.onFrame(new Uint8Array(ev.data as ArrayBuffer));
+      ws.onmessage = (event) => this.onFrame(new Uint8Array(event.data as ArrayBuffer));
       ws.onclose = () => this.onClose();
-      ws.onerror = () => {/* 由 onclose 触发重连 */};
+      ws.onerror = () => { /* onclose drives reconnect */ };
     });
   }
 
   private async auth(): Promise<any> {
-    const o = this.opts!;
+    const opts = this.opts!;
     const payload = P.AuthReq.encode({
-      accessToken: o.userToken, deviceId: o.deviceId,
-      deviceType: DEVICE_TYPE_VALUE[o.deviceType ?? "WEB"], platform: "web",
-      clientVersion: "0.1.0", appId: this.appId, userId: o.userId,
+      accessToken: opts.userToken, deviceId: opts.deviceId,
+      deviceType: DEVICE_TYPE_VALUE[opts.deviceType ?? "WEB"], platform: "web",
+      clientVersion: "0.2.0", appId: this.appId, userId: opts.userId,
     }).finish();
     const env = await this.request(P.Command.COMMAND_AUTH_REQ, payload);
     return env.code === 0 ? { code: 0, ...P.AuthResp.decode(env.payload) } : { code: env.code };
   }
 
-  /** 发送单聊文本（web-sdk：发送幂等 + 乐观态 + 超时失败）。 */
   async sendText(convId: string, text: string): Promise<ChatMessage> {
-    const clientMsgId = "c-" + crypto.randomUUID();
-    const local: ChatMessage = { msgId: "", clientMsgId, convId, senderId: this.opts!.userId,
-      text, convSeq: 0, serverTime: Date.now(), state: "sending" };
-    this.appendLocal(convId, local);
-    this.emit("message", local);
+    return this.sendMessage({ convId, kind: "TEXT", content: { text: { text } } });
+  }
 
-    const content = P.MsgContent.decode(P.MsgContent.encode({ text: { text } }).finish());
-    const payload = P.SendMsgReq.encode({ clientMsgId, convId, convType: 1, msgType: 1, content }).finish();
+  /** 统一发送 API：所有消息类型复用幂等、乐观态、超时失败和失败重发语义。 */
+  async sendMessage(input: SendMessageInput): Promise<ChatMessage> {
+    if (!this.opts) throw new Error("not logged in");
+    const clientMsgId = input.clientMsgId ?? "c-" + crypto.randomUUID();
+    const convType = input.convType ?? (input.convId.startsWith("gr_") ? "GROUP" : "SINGLE");
+    const kind = input.kind ?? "TEXT";
+    const existing = [...this.messages.values()].flat().find((item) => item.clientMsgId === clientMsgId);
+    const message: ChatMessage = existing ?? {
+      msgId: "", clientMsgId, convId: input.convId, convType,
+      senderId: this.opts.userId, kind, content: input.content,
+      text: this.messageText(input.content, MSG_TYPE_VALUE[kind]), convSeq: 0,
+      serverTime: Date.now(), state: "sending",
+      recalled: false, restricted: false, isRequest: false,
+      replyToMsgId: input.replyToMsgId, mentions: input.mentions ?? [], burnAfterReadTtlSeconds: 0,
+    };
+    message.state = "sending";
+    message.kind = kind;
+    message.content = input.content;
+    message.text = this.messageText(input.content, MSG_TYPE_VALUE[kind]);
+    if (!existing) this.appendLocal(message);
+    this.emit("message", message);
     try {
+      const content = P.MsgContent.decode(P.MsgContent.encode(input.content).finish());
+      const payload = P.SendMsgReq.encode({
+        clientMsgId, convId: input.convId,
+        convType: CONV_TYPE_VALUE[convType], msgType: MSG_TYPE_VALUE[kind], content,
+        replyToMsgId: input.replyToMsgId ?? "", mentions: input.mentions ?? [],
+      }).finish();
       const env = await this.request(P.Command.COMMAND_SEND_MSG_REQ, payload);
-      if (env.code !== 0) { local.state = "failed"; this.emit("message", local); return local; }
-      const resp = P.SendMsgResp.decode(env.payload) as any;
-      local.msgId = resp.msgId; local.convSeq = Number(resp.convSeq);
-      local.serverTime = Number(resp.serverTime); local.state = "sent";
-      this.seen.add(resp.msgId);
-      this.reorder(convId);
-      this.emit("message", local);
-      return local;
+      if (env.code !== 0) {
+        message.state = "failed";
+        this.emit("message", message);
+        return message;
+      }
+      const response = P.SendMsgResp.decode(env.payload) as any;
+      message.msgId = response.msgId;
+      message.convSeq = Number(response.convSeq);
+      message.serverTime = Number(response.serverTime);
+      message.state = "sent";
+      this.seen.add(message.msgId);
+      this.reorder(message.convId);
+      this.emit("message", message);
+      return message;
     } catch {
-      local.state = "failed"; this.emit("message", local); return local;
+      message.state = "failed";
+      this.emit("message", message);
+      return message;
     }
   }
 
-  /** 手动重发：复用原 clientMsgId（服务端幂等，不重复）。 */
-  async resend(m: ChatMessage): Promise<void> {
-    const content = P.MsgContent.decode(P.MsgContent.encode({ text: { text: m.text } }).finish());
-    const payload = P.SendMsgReq.encode({ clientMsgId: m.clientMsgId, convId: m.convId,
-      convType: 1, msgType: 1, content }).finish();
-    m.state = "sending"; this.emit("message", m);
-    try {
-      const env = await this.request(P.Command.COMMAND_SEND_MSG_REQ, payload);
-      if (env.code === 0) {
-        const r = P.SendMsgResp.decode(env.payload) as any;
-        m.msgId = r.msgId; m.convSeq = Number(r.convSeq); m.state = "sent";
-        this.seen.add(r.msgId); this.reorder(m.convId);
-      } else m.state = "failed";
-    } catch { m.state = "failed"; }
-    this.emit("message", m);
+  async resend(message: ChatMessage): Promise<void> {
+    await this.sendMessage({ convId: message.convId, convType: message.convType,
+      kind: message.kind, content: message.content, clientMsgId: message.clientMsgId,
+      replyToMsgId: message.replyToMsgId, mentions: message.mentions });
   }
 
-  logout() {
-    this.kicked = true; // 阻止自动重连
+  async recall(msgId: string): Promise<any> {
+    const env = await this.request(P.Command.COMMAND_RECALL_MSG_REQ,
+      P.RecallMsgReq.encode({ msgId }).finish());
+    if (env.code !== 0) throw this.protocolError(env.code);
+    return P.RecallMsgResp.decode(env.payload);
+  }
+
+  async forward(msgIds: string[], targetConvIds: string[], merged = false): Promise<any> {
+    return this.http("POST", "/messages/forward", { msg_ids: msgIds, target_conv_ids: targetConvIds, merged });
+  }
+
+  async deleteLocal(msgId: string): Promise<void> {
+    await this.http("DELETE", `/messages/${encodeURIComponent(msgId)}`);
+    this.locallyDeleted.add(msgId);
+    for (const [convId, messages] of this.messages) {
+      this.messages.set(convId, messages.filter((message) => message.msgId !== msgId));
+    }
+    this.persistStore();
+  }
+
+  async clearHistory(convId: string): Promise<void> {
+    await this.http("DELETE", `/conversations/${encodeURIComponent(convId)}/messages`);
+    this.messages.set(convId, []);
+    this.persistStore();
+  }
+
+  async history(convId: string, beforeConvSeq = 0, limit = 50): Promise<any[]> {
+    const page = await this.http<any>("GET",
+      `/conversations/${encodeURIComponent(convId)}/messages?before_conv_seq=${beforeConvSeq}&limit=${limit}`);
+    const items = (page?.items ?? []).filter((item: any) => !this.locallyDeleted.has(item.msg_id));
+    for (const item of items) this.mergeHistoryItem(item);
+    return items;
+  }
+
+  async uploadMedia(file: Blob, options: Omit<MediaUploadOptions, "sizeBytes" | "mimeType"> & {
+    sizeBytes?: number; mimeType?: string;
+  }): Promise<UploadSession> {
+    const session = this.normalizeUpload(await this.http<any>("POST", "/media/upload/init", {
+      file_name: options.fileName, size_bytes: options.sizeBytes ?? file.size,
+      sha256: options.sha256, mime_type: options.mimeType ?? file.type,
+      media_type: options.mediaType, duration_seconds: options.durationSeconds,
+      width: options.width, height: options.height, burn_after_read: options.burnAfterRead,
+      burn_after_read_ttl_seconds: options.burnAfterReadTtlSeconds,
+    }));
+    if (session.instant) return session;
+    const uploaded = new Set(session.uploadedParts);
+    let uploadedBytes = uploaded.size * session.partSize;
+    for (let part = 1; part <= session.totalParts; part++) {
+      if (uploaded.has(part)) continue;
+      const start = (part - 1) * session.partSize;
+      const end = Math.min(start + session.partSize, session.sizeBytes);
+      const bytes = new Uint8Array(await file.slice(start, end).arrayBuffer());
+      await this.uploadPart(session.uploadId, part, bytes, options.signal);
+      uploadedBytes += bytes.byteLength;
+      options.onProgress?.(uploadedBytes, session.sizeBytes);
+    }
+    return this.normalizeUpload(await this.http<any>("POST",
+      `/media/upload/${encodeURIComponent(session.uploadId)}/complete`));
+  }
+
+  async uploadPart(uploadId: string, partNumber: number, bytes: Uint8Array, signal?: AbortSignal): Promise<any> {
+    return this.http("PUT", `/media/upload/${encodeURIComponent(uploadId)}/part/${partNumber}`, bytes, { signal });
+  }
+
+  async getMedia(mediaId: string): Promise<any> {
+    const media = await this.http<any>("GET", `/media/${encodeURIComponent(mediaId)}`);
+    return {
+      ...media,
+      mediaId: media.media_id ?? media.mediaId,
+      mediaType: media.media_type ?? media.mediaType,
+      mimeType: media.mime_type ?? media.mimeType,
+      sizeBytes: media.size_bytes ?? media.sizeBytes,
+      thumbUrl: media.thumb_url ?? media.thumbUrl,
+      durationSeconds: media.duration_seconds ?? media.durationSeconds,
+      fileName: media.file_name ?? media.fileName,
+    };
+  }
+
+  private normalizeUpload(value: any): UploadSession {
+    return {
+      uploadId: value.upload_id ?? value.uploadId ?? "",
+      partSize: Number(value.part_size ?? value.partSize ?? 0),
+      sizeBytes: Number(value.size_bytes ?? value.sizeBytes ?? 0),
+      totalParts: Number(value.total_parts ?? value.totalParts ?? 0),
+      uploadedParts: value.uploaded_parts ?? value.uploadedParts ?? [],
+      instant: Boolean(value.instant),
+      mediaId: value.media_id ?? value.mediaId,
+      url: value.url,
+      thumbUrl: value.thumb_url ?? value.thumbUrl,
+    };
+  }
+
+  async sendMedia(convId: string, kind: "IMAGE" | "VOICE" | "VIDEO" | "FILE",
+                  media: UploadSession, extra: Record<string, unknown> = {}): Promise<ChatMessage> {
+    const raw = { media_id: media.mediaId, url: media.url, thumb_url: media.thumbUrl,
+      cover_url: media.thumbUrl, ...extra };
+    const normalized = Object.fromEntries(Object.entries(raw).map(([key, value]) => [
+      key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value,
+    ]));
+    const content = { [kind.toLowerCase()]: normalized };
+    return this.sendMessage({ convId, kind, content });
+  }
+
+  async listConversations(cursor?: string, limit = 50): Promise<any> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (cursor) query.set("cursor", cursor);
+    const page = await this.http<any>("GET", `/conversations?${query}`);
+    for (const item of page.items ?? []) this.conversations.set(item.conv_id, item);
+    return page;
+  }
+  async getConversation(convId: string): Promise<any> { return this.http("GET", `/conversations/${encodeURIComponent(convId)}`); }
+  getConversationState(convId: string): any | undefined { return this.conversations.get(convId); }
+  async updateConversation(convId: string, patch: { pinned?: boolean; muted?: boolean }): Promise<any> {
+    this.optimisticConversation(convId, patch);
+    try { return await this.http("POST", `/conversations/${encodeURIComponent(convId)}`, patch); }
+    catch (error) { this.rollbackConversation(convId, patch); throw error; }
+  }
+  async deleteConversation(convId: string): Promise<void> { await this.http("DELETE", `/conversations/${encodeURIComponent(convId)}`); }
+  async markRead(convId: string, readConvSeq: number): Promise<any> {
+    return this.http("PUT", `/conversations/${encodeURIComponent(convId)}/read-positions`, { read_conv_seq: readConvSeq });
+  }
+  async saveDraft(convId: string, draft: string, editedAt = Date.now()): Promise<any> {
+    return this.http("PUT", `/conversations/${encodeURIComponent(convId)}/draft`, { draft, edited_at: editedAt });
+  }
+  async clearDraft(convId: string, editedAt = Date.now()): Promise<any> {
+    return this.http("DELETE", `/conversations/${encodeURIComponent(convId)}/draft`, { edited_at: editedAt });
+  }
+  async handleMessageRequest(convId: string, accept: boolean): Promise<any> {
+    return this.http("POST", `/conversations/${encodeURIComponent(convId)}/request`, { accept });
+  }
+
+  async getUserProfile(userId = this.opts?.userId): Promise<any> {
+    return this.http("GET", userId === this.opts?.userId ? "/users/me" : `/users/${encodeURIComponent(userId!)}`);
+  }
+  async updateProfile(profile: Record<string, unknown>): Promise<any> { return this.http("PUT", "/users/me", profile); }
+  async listFriends(): Promise<any[]> { return this.http("GET", "/friends"); }
+  async createFriendRequest(toUserId: string, verificationMessage = ""): Promise<any> {
+    return this.http("POST", "/friends/requests", { to_user_id: toUserId, verification_message: verificationMessage });
+  }
+  async listFriendRequests(includeHandled = false): Promise<any> {
+    return this.http("GET", `/friends/requests?include_handled=${includeHandled}`);
+  }
+  async handleFriendRequest(requestId: string, action: "ACCEPT" | "REJECT" | "IGNORE"): Promise<any> {
+    return this.http("POST", `/friends/requests/${encodeURIComponent(requestId)}`, { action });
+  }
+  async updateFriend(friendId: string, request: Record<string, unknown>): Promise<any> {
+    return this.http("PUT", `/friends/${encodeURIComponent(friendId)}`, request);
+  }
+  async deleteFriend(friendId: string): Promise<void> { await this.http("DELETE", `/friends/${encodeURIComponent(friendId)}`); }
+  async listBlacklist(): Promise<any[]> { return this.http("GET", "/blacklist"); }
+  async blockUser(userId: string): Promise<void> { await this.http("POST", "/blacklist", { user_id: userId }); }
+  async unblockUser(userId: string): Promise<void> { await this.http("DELETE", "/blacklist", { user_id: userId }); }
+  async getQrCard(): Promise<any> { return this.http("GET", "/friends/qr"); }
+  async refreshQrCard(): Promise<any> { return this.http("POST", "/friends/qr/refresh"); }
+  async scanQrCard(token: string): Promise<any> { return this.http("POST", "/friends/qr/scan", { token }); }
+
+  async listGroups(): Promise<any[]> { return this.http("GET", "/groups"); }
+  async createGroup(name: string, memberIds: string[]): Promise<any> {
+    return this.http("POST", "/groups", { name, member_ids: memberIds });
+  }
+  async getGroup(groupId: string): Promise<any> { return this.http("GET", `/groups/${encodeURIComponent(groupId)}`); }
+  async listGroupMembers(groupId: string): Promise<any[]> { return this.http("GET", `/groups/${encodeURIComponent(groupId)}/members`); }
+  async inviteGroupMembers(groupId: string, userIds: string[]): Promise<void> {
+    await this.http("POST", `/groups/${encodeURIComponent(groupId)}/members`, { user_ids: userIds });
+  }
+  async removeGroupMember(groupId: string, userId: string): Promise<void> {
+    await this.http("DELETE", `/groups/${encodeURIComponent(groupId)}/members?user_id=${encodeURIComponent(userId)}`);
+  }
+  async updateGroupRole(groupId: string, userId: string, role: "ADMIN" | "MEMBER"): Promise<void> {
+    await this.http("PUT", `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}/role`, { role });
+  }
+  async transferGroupOwner(groupId: string, userId: string, oldOwnerRole: "ADMIN" | "MEMBER" = "MEMBER"): Promise<any> {
+    return this.http("POST", `/groups/${encodeURIComponent(groupId)}/transfer`, { user_id: userId, old_owner_role: oldOwnerRole });
+  }
+  async leaveGroup(groupId: string): Promise<void> {
+    await this.http("DELETE", `/groups/${encodeURIComponent(groupId)}/leave`);
+  }
+  async dissolveGroup(groupId: string): Promise<void> { await this.http("DELETE", `/groups/${encodeURIComponent(groupId)}`); }
+  async muteGroupMember(groupId: string, userId: string | null, durationSeconds: number | null): Promise<void> {
+    await this.http("POST", `/groups/${encodeURIComponent(groupId)}/mutes`, { user_id: userId, duration_seconds: durationSeconds });
+  }
+  async updateAnnouncement(groupId: string, content: string): Promise<any> {
+    return this.http("PUT", `/groups/${encodeURIComponent(groupId)}/announcement`, { content });
+  }
+  async updateGroupNickname(groupId: string, userId: string, nickname: string): Promise<void> {
+    await this.http("PUT", `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}/nickname`, { nickname });
+  }
+
+  async listDevices(): Promise<any[]> { return this.http("GET", "/devices"); }
+  async remoteLogout(deviceId: string): Promise<void> { await this.http("POST", `/devices/${encodeURIComponent(deviceId)}/logout`); }
+  async registerPushToken(token: string, deviceType: DeviceType, provider: string): Promise<void> {
+    await this.http("POST", "/push/tokens", { token, device_type: DEVICE_TYPE_VALUE[deviceType], provider });
+  }
+  async unregisterPushToken(token: string): Promise<void> { await this.http("DELETE", "/push/tokens", { token }); }
+  async getPushSettings(): Promise<any> { return this.http("GET", "/push/settings"); }
+  async updatePushSettings(pushEnabled: boolean, previewEnabled: boolean): Promise<any> {
+    return this.http("PUT", "/push/settings", { push_enabled: pushEnabled, preview_enabled: previewEnabled });
+  }
+  getNotificationPermission(): NotificationPermission | "unsupported" {
+    return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  }
+  async requestNotificationPermission(): Promise<NotificationPermission | "unsupported"> {
+    if (typeof Notification === "undefined") return "unsupported";
+    return Notification.requestPermission();
+  }
+
+  async search(query: string, limit = 20): Promise<any> {
+    return this.http("GET", `/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+  async searchSuggestions(query: string, limit = 10): Promise<any> {
+    return this.http("GET", `/search/suggest?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  /** 输入防抖：后发请求覆盖先发请求，旧响应不会覆盖新关键词结果。 */
+  searchDebounced(query: string, waitMs = 300, limit = 20): Promise<any> {
+    clearTimeout(this.searchTimer);
+    const sequence = ++this.searchSequence;
+    return new Promise((resolve, reject) => {
+      this.searchTimer = setTimeout(() => {
+        this.search(query, limit).then((result) => {
+          if (sequence === this.searchSequence) resolve(result);
+          else resolve({ contacts: [], groups: [], messages: [], contactTotal: 0,
+            groupTotal: 0, messageTotal: 0, stale: true });
+        }).catch((error) => sequence === this.searchSequence ? reject(error) : resolve(null));
+      }, Math.max(0, waitMs));
+    });
+  }
+  searchSuggestionsDebounced(query: string, waitMs = 300, limit = 10): Promise<any> {
+    clearTimeout(this.searchTimer);
+    const sequence = ++this.searchSequence;
+    return new Promise((resolve, reject) => {
+      this.searchTimer = setTimeout(() => {
+        this.searchSuggestions(query, limit).then((result) => {
+          if (sequence === this.searchSequence) resolve(result);
+          else resolve({ contacts: [], groups: [], total: 0, stale: true });
+        }).catch((error) => sequence === this.searchSequence ? reject(error) : resolve(null));
+      }, Math.max(0, waitMs));
+    });
+  }
+  async searchConversation(convId: string, query: string, limit = 20): Promise<any> {
+    return this.http("GET", `/conversations/${encodeURIComponent(convId)}/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+  async report(targetType: "MESSAGE" | "USER" | "GROUP", targetId: string,
+               reason: string, description = ""): Promise<any> {
+    return this.http("POST", "/reports", { target_type: targetType, target_id: targetId, reason, description });
+  }
+  async listReports(): Promise<any[]> { return this.http("GET", "/reports"); }
+  async submitAppeal(sanctionId: string, content: string): Promise<any> {
+    return this.http("POST", "/appeals", { sanction_id: sanctionId, content });
+  }
+  async listAppeals(appealId?: string): Promise<any[]> {
+    return this.http("GET", "/appeals" + (appealId ? `?appeal_id=${encodeURIComponent(appealId)}` : ""));
+  }
+  async exportAccount(): Promise<any[]> { return this.http("POST", "/account/export"); }
+  async getAccountExports(): Promise<any[]> { return this.http("GET", "/account/export"); }
+  async setMinorMode(enabled: boolean): Promise<void> { await this.http("POST", "/account/minor-mode", { enabled }); }
+  async getPrivacyLinks(): Promise<any> { return this.http("GET", "/account/privacy-links"); }
+  async updatePrivacyLinks(privacyPolicyUrl: string, termsUrl: string): Promise<any> {
+    return this.http("PUT", "/account/privacy-links", { privacy_policy_url: privacyPolicyUrl, terms_url: termsUrl });
+  }
+
+  async sendTyping(convId: string, typing: boolean): Promise<void> {
+    this.rawSend(P.Command.COMMAND_TYPING_SIGNAL, P.TypingSignal.encode({ convId, typing }).finish());
+  }
+  async subscribePresence(userIds: string[]): Promise<any> {
+    const env = await this.request(P.Command.COMMAND_PRESENCE_SUB_REQ,
+      P.PresenceSubReq.encode({ userIds }).finish());
+    if (env.code === 0) {
+      const response = P.PresenceSubResp.decode(env.payload) as any;
+      for (const presence of response.presences ?? []) this.emit("presence", presence);
+      return response;
+    }
+    throw this.protocolError(env.code);
+  }
+  async unsubscribePresence(userIds: string[]): Promise<void> {
+    this.rawSend(P.Command.COMMAND_PRESENCE_UNSUB_REQ, P.PresenceUnsubReq.encode({ userIds }).finish());
+  }
+  async setAppState(foreground: boolean): Promise<void> {
+    await this.request(P.Command.COMMAND_APP_STATE_REQ, P.AppStateReq.encode({ foreground }).finish());
+  }
+
+  handleNotificationClick(data: Record<string, string>): void {
+    this.emit("notificationClick", data);
+    if (data.conv_id) this.emit("conversation", { type: "NOTIFICATION_CLICK", convId: data.conv_id });
+  }
+
+  logout(): void {
+    this.kicked = true;
     this.stopHeartbeat();
-    try { this.ws?.close(); } catch {}
+    try { this.ws?.close(); } catch { /* noop */ }
+    if (this.opts) {
+      this.removeKey(this.cursorKey(this.opts.userId));
+      this.removeKey(this.messagesKey(this.opts.userId));
+    }
+    this.messages.clear();
+    this.locallyDeleted.clear();
+    this.seen.clear();
+    this.cursor = 0;
+    this.opts = undefined;
+    this.storeUserId = undefined;
+    this.appConfig = undefined;
     this.setState("closed");
   }
 
-  // ---- 帧处理 ----
-  private onFrame(bytes: Uint8Array) {
+  private onFrame(bytes: Uint8Array): void {
     const env = P.Envelope.decode(bytes) as any;
     const cid = Number(env.cid);
     if (cid && this.pending.has(cid)) {
-      const p = this.pending.get(cid)!; this.pending.delete(cid); clearTimeout(p.timer); p.resolve(env);
+      const pending = this.pending.get(cid)!;
+      this.pending.delete(cid);
+      clearTimeout(pending.timer);
+      pending.resolve(env);
       return;
     }
     switch (env.cmd) {
       case P.Command.COMMAND_MSG_PUSH: this.onPush(env); break;
+      case P.Command.COMMAND_SYNC_EVENT_PUSH: this.onSyncPush(env); break;
       case P.Command.COMMAND_KICK_PUSH: this.onKick(env); break;
+      case P.Command.COMMAND_TYPING_PUSH: this.emit("typing", P.TypingPush.decode(env.payload)); break;
+      case P.Command.COMMAND_PRESENCE_PUSH:
+        this.emit("presence", (P.PresencePush.decode(env.payload) as any).presence);
+        break;
       default: break;
     }
   }
 
-  private onPush(env: any) {
+  private onPush(env: any): void {
     const push = P.MsgPush.decode(env.payload) as any;
     const userSeq = Number(push.userSeq);
-    // 自动 ACK（web-sdk：接收与自动 ACK）
     this.rawSend(P.Command.COMMAND_MSG_ACK, P.MsgAck.encode({ userSeq }).finish());
     if (userSeq > this.cursor) {
       this.applyNewMessage(push.msg);
@@ -206,143 +613,378 @@ export class PhantomClient extends Emitter {
     }
   }
 
-  private onKick(env: any) {
-    const kick = P.KickPush.decode(env.payload) as any;
-    const reasonName = P.KickPush.lookupEnum("KickReason").valuesById?.[kick.reason] ?? String(kick.reason);
-    this.kicked = true;             // web-sdk：被踢不自动重连
-    this.stopHeartbeat();
-    this.setState("closed");
-    this.emit("kicked", reasonName);
-    try { this.ws?.close(); } catch {}
+  private onSyncPush(env: any): void {
+    const push = P.SyncEventPush.decode(env.payload) as any;
+    this.applySyncEvent(push.event);
+    this.cursor = Math.max(this.cursor, Number(push.event?.userSeq ?? 0));
+    this.saveCursor();
+    this.rawSend(P.Command.COMMAND_MSG_ACK, P.MsgAck.encode({ userSeq: this.cursor }).finish());
   }
 
-  /** 应用一条新消息到本地缓存（msgId 去重 + conv_seq 有序）。 */
-  private applyNewMessage(msg: any) {
-    if (!msg || !msg.msgId) return;
-    if (this.seen.has(msg.msgId)) return;   // 重复推送/重连竞态幂等丢弃
-    // 自己发送的消息会先以乐观态存在本地；服务端回推时按 client_msg_id 合并，避免双气泡。
-    const existing = this.store.get(msg.convId)?.find((m) => m.clientMsgId === msg.clientMsgId);
+  private onKick(env: any): void {
+    const kick = P.KickPush.decode(env.payload) as any;
+    const reason = P.KickPush.lookupEnum("KickReason").valuesById?.[kick.reason] ?? String(kick.reason);
+    this.kicked = true;
+    this.stopHeartbeat();
+    this.setState("closed");
+    this.emit("kicked", reason);
+    try { this.ws?.close(); } catch { /* noop */ }
+  }
+
+  private applyNewMessage(msg: any): void {
+    if (!msg?.msgId || this.seen.has(msg.msgId)) return;
+    const existing = (this.messages.get(msg.convId) ?? []).find((item) => item.clientMsgId === msg.clientMsgId);
     if (existing) {
       existing.msgId = msg.msgId;
       existing.convSeq = Number(msg.convSeq);
       existing.serverTime = Number(msg.serverTime);
-      existing.state = "sent";
+      existing.state = this.stateFromProto(msg.status);
       this.seen.add(msg.msgId);
       this.reorder(msg.convId);
-      this.emit("message", existing);
+      this.emit("message", {...existing});
       return;
     }
+    const message = this.fromProtoMessage(msg);
     this.seen.add(msg.msgId);
-    const cm: ChatMessage = { msgId: msg.msgId, clientMsgId: msg.clientMsgId, convId: msg.convId,
-      senderId: msg.senderId, text: msg.content?.text?.text ?? "",
-      convSeq: Number(msg.convSeq), serverTime: Number(msg.serverTime), state: "sent" };
-    this.appendLocal(cm.convId, cm);
-    this.reorder(cm.convId);
-    this.emit("message", cm);
+    this.appendLocal(message);
+    this.reorder(message.convId);
+    this.emit("message", message);
   }
 
-  // ---- 同步（sync-catchup）----
-  private async syncLoop() {
-    let hasMore = true;
-    while (hasMore) {
-      const payload = P.SyncReq.encode({ sinceUserSeq: this.cursor, limit: 200 }).finish();
-      const env = await this.request(P.Command.COMMAND_SYNC_REQ, payload);
-      const resp = P.SyncResp.decode(env.payload) as any;
-      for (const ev of resp.events ?? []) {
-        const seq = Number(ev.userSeq);
-        if (seq <= this.cursor) continue;    // 幂等丢弃
-        if (ev.newMessage) this.applyNewMessage(ev.newMessage.msg);
-        this.cursor = Math.max(this.cursor, seq);
-      }
-      this.saveCursor();
-      hasMore = !!resp.hasMore;
+  private applySyncEvent(event: any): void {
+    if (!event) return;
+    if (event.newMessage?.msg) this.applyNewMessage(event.newMessage.msg);
+    if (event.recall) this.markRecalled(event.recall.msgId);
+    if (event.msgStatus) this.applyStatus(event.msgStatus);
+    if (event.restrictedDelivery) this.applyRestricted(event.restrictedDelivery);
+    this.emit("sync", event);
+    if (event.relation) this.emit("relation", event.relation);
+    if (event.group) this.emit("group", event.group);
+    if (event.profile) this.emit("profile", event.profile);
+    if (event.convState || event.draft || event.readReceipt || event.readPosition) {
+      this.emit("conversation", event);
     }
   }
 
-  // ---- 重连（web-sdk：指数退避 + 抖动）----
-  private onClose() {
+  private markRecalled(msgId: string): void {
+    for (const [convId, messages] of this.messages) {
+      const message = messages.find((item) => item.msgId === msgId);
+      if (message) {
+        message.recalled = true;
+        message.state = "recalled";
+        message.text = "消息已撤回";
+        this.reorder(convId);
+        this.emit("message", {...message});
+      }
+    }
+  }
+
+  private applyStatus(status: any): void {
+    for (const messages of this.messages.values()) {
+      const message = messages.find((item) => item.msgId === status.msgId);
+      if (message) {
+        message.state = this.stateFromProto(status.status);
+        this.emit("message", {...message});
+      }
+    }
+  }
+
+  private applyRestricted(event: any): void {
+    for (const messages of this.messages.values()) {
+      const message = messages.find((item) => item.msgId === event.msgId);
+      if (message) {
+        message.restricted = true;
+        this.emit("message", {...message});
+      }
+    }
+  }
+
+  private async syncLoop(): Promise<void> {
+    let hasMore = true;
+    while (hasMore) {
+      const env = await this.request(P.Command.COMMAND_SYNC_REQ,
+        P.SyncReq.encode({ sinceUserSeq: this.cursor, limit: 200 }).finish());
+      if (env.code !== 0) throw this.protocolError(env.code);
+      const response = P.SyncResp.decode(env.payload) as any;
+      if (response.fullResync) {
+        this.messages.clear();
+        this.conversations.clear();
+        this.seen.clear();
+        this.cursor = 0;
+        this.emit("conversation", { type: "FULL_RESYNC_REQUIRED" });
+        await this.fullResync();
+        return;
+      }
+      for (const event of response.events ?? []) {
+        const sequence = Number(event.userSeq);
+        if (sequence <= this.cursor) continue;
+        this.applySyncEvent(event);
+        this.cursor = Math.max(this.cursor, sequence);
+      }
+      this.saveCursor();
+      hasMore = Boolean(response.hasMore);
+    }
+  }
+
+  /** 新设备或游标过期时按会话快照 + 历史分页重建，并重置到服务端 max_user_seq。 */
+  private async fullResync(): Promise<void> {
+    let cursor: string | undefined;
+    do {
+      const page = await this.listConversations(cursor, 200);
+      for (const conversation of page.items ?? []) {
+        this.conversations.set(conversation.conv_id, conversation);
+        let before = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const items = await this.history(conversation.conv_id, before, 200);
+          hasMore = items.length === 200;
+          if (items.length > 0) before = Number(items[0].conv_seq);
+        }
+      }
+      this.cursor = Math.max(this.cursor, Number(page.max_user_seq ?? 0));
+      cursor = page.has_more ? page.next_cursor : undefined;
+    } while (cursor);
+    this.saveCursor();
+  }
+
+  private onClose(): void {
     this.stopHeartbeat();
     this.emit("disconnected");
     if (this.kicked || this.authFailed || this.state === "closed") return;
     this.setState("reconnecting");
-    const jitter = this.backoff * (0.7 + Math.random() * 0.6); // ±30%
+    const jitter = this.backoff * (0.7 + Math.random() * 0.6);
     setTimeout(() => {
-      if (this.kicked) return;
-      this.openAndAuth().catch(() => {/* onClose 会再次调度 */});
+      if (!this.kicked) this.openAndAuth().catch(() => { /* next close drives retry */ });
     }, Math.min(jitter, MAX_BACKOFF_MS));
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
   }
 
-  private startHeartbeat() {
+  private startHeartbeat(): void {
     this.stopHeartbeat();
     this.hbTimer = setInterval(() => {
-      this.request(P.Command.COMMAND_PING, P.Ping.encode({}).finish()).catch(() => {});
+      this.request(P.Command.COMMAND_PING, P.Ping.encode({}).finish()).catch(() => { /* reconnect */ });
     }, HEARTBEAT_MS);
   }
-  private stopHeartbeat() { if (this.hbTimer) { clearInterval(this.hbTimer); this.hbTimer = undefined; } }
+  private stopHeartbeat(): void { if (this.hbTimer) { clearInterval(this.hbTimer); this.hbTimer = undefined; } }
 
-  // ---- 底层收发 ----
   private request(cmd: number, payload: Uint8Array): Promise<any> {
     const cid = ++this.cid;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(cid); reject(new Error("timeout")); }, SEND_TIMEOUT_MS);
+      const timer = setTimeout(() => {
+        this.pending.delete(cid);
+        reject(new Error("timeout"));
+      }, SEND_TIMEOUT_MS);
       this.pending.set(cid, { resolve, reject, timer });
       this.rawSend(cmd, payload, cid);
     });
   }
-  private rawSend(cmd: number, payload: Uint8Array, cid = 0) {
+  private rawSend(cmd: number, payload: Uint8Array, cid = 0): void {
     const env = P.Envelope.encode({ version: 1, cmd, cid, code: 0, payload }).finish();
     this.ws?.send(env);
   }
+  private protocolError(code: number): Error { return new Error("protocol error code=" + code); }
 
-  // ---- 本地缓存 ----
-  private appendLocal(convId: string, m: ChatMessage) {
-    const arr = this.store.get(convId) ?? this.store.set(convId, []).get(convId)!;
-    arr.push(m);
+  private async http<T = any>(method: string, path: string, body?: any,
+                              options: { signal?: AbortSignal } = {}): Promise<T> {
+    if (!this.opts) throw new Error("not logged in");
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.opts.userToken}`,
+      "X-App-Id": this.appId,
+      "X-User-Id": this.opts.userId,
+      "X-Device-Id": this.opts.deviceId,
+    };
+    const init: RequestInit = { method, headers, signal: options.signal };
+    if (body instanceof Uint8Array) {
+      headers["Content-Type"] = "application/octet-stream";
+      init.body = body as BodyInit;
+    } else if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(body);
+    }
+    const response = await this.fetchImpl(`${this.httpBaseUrl}${path}`, init);
+    if (!response.ok) {
+      let detail: any = {};
+      try { detail = await response.json(); } catch { /* noop */ }
+      const error = new Error(detail?.message ?? `HTTP ${response.status}`) as Error & { code?: number };
+      error.code = detail?.code;
+      throw error;
+    }
+    if (response.status === 204) return undefined as T;
+    const payload = await response.json();
+    if (payload && typeof payload === "object" && "code" in payload) {
+      if (payload.code !== 0) {
+        const error = new Error(payload.message ?? "request failed") as Error & { code?: number };
+        error.code = payload.code;
+        throw error;
+      }
+      return payload.data as T;
+    }
+    return payload as T;
+  }
+
+  private fromProtoMessage(msg: any): ChatMessage {
+    const content = msg.content ?? {};
+    const burned = this.burned(msg);
+    const safeContent = burned ? {} : content;
+    return {
+      msgId: msg.msgId ?? "", clientMsgId: msg.clientMsgId ?? "", convId: msg.convId,
+      convType: Number(msg.convType) === CONV_TYPE_VALUE.GROUP ? "GROUP" : "SINGLE",
+      senderId: msg.senderId, kind: this.kindFromProto(msg.msgType), content: safeContent,
+      text: burned ? "消息已焚毁" : this.messageText(safeContent, msg.msgType),
+      convSeq: Number(msg.convSeq), serverTime: Number(msg.serverTime),
+      state: msg.recalled ? "recalled" : burned ? "burned" : this.stateFromProto(msg.status),
+      recalled: Boolean(msg.recalled), restricted: Boolean(msg.restricted),
+      isRequest: Boolean(msg.isRequest), replyToMsgId: msg.replyToMsgId || undefined,
+      replySnapshot: msg.replySnapshot, mentions: msg.mentions ?? [],
+      burnAfterReadTtlSeconds: Number(msg.burnAfterReadTtlSeconds ?? 0),
+    };
+  }
+
+  private kindFromProto(value: number): MessageKind {
+    return (Object.entries(MSG_TYPE_VALUE).find(([, id]) => id === value)?.[0] ?? "TEXT") as MessageKind;
+  }
+  private stateFromProto(value: number): MessageState {
+    if (value === 4) return "read";
+    if (value === 3) return "delivered";
+    if (value === 5) return "failed";
+    return "sent";
+  }
+  private burned(msg: any): boolean {
+    return this.burnedAt(msg.serverTime, msg.burnAfterReadTtlSeconds);
+  }
+  private burnedAt(serverTime: unknown, ttlSeconds: unknown): boolean {
+    return Number(ttlSeconds ?? 0) > 0
+      && Date.now() > Number(serverTime) + Number(ttlSeconds) * 1000;
+  }
+  private messageText(content: Record<string, any>, type: number): string {
+    if (type === MSG_TYPE_VALUE.SYSTEM) return this.systemText(content.system);
+    return content.text?.text ?? this.contentDigest(content, type);
+  }
+  private systemText(system: any): string {
+    const template = String(system?.templateId ?? "");
+    const params = system?.params ?? {};
+    const actor = params.operator_name ?? params.operator_id ?? params.name ?? "";
+    const templates: Record<string, string> = {
+      "group.created": actor ? `${actor} 创建了群聊` : "群聊已创建",
+      "group.member.joined": actor ? `${actor} 加入了群聊` : "成员加入群聊",
+      "group.member.left": actor ? `${actor} 退出了群聊` : "成员退出群聊",
+      "group.member.kicked": actor ? `${actor} 被移出群聊` : "成员被移出群聊",
+      "group.role.changed": "群成员角色已更新",
+      "friend.accepted": "好友申请已通过",
+      "delivery.restricted": "消息可能不会被对方看到",
+      "moderation.recalled": "消息因内容规范被撤回",
+    };
+    return templates[template] ?? params.text ?? (template ? `[系统消息] ${template}` : "[系统消息]");
+  }
+  private contentDigest(content: any, type: number): string {
+    if (type === 3) return "[图片]";
+    if (type === 4) return "[语音]";
+    if (type === 5) return "[视频]";
+    if (type === 6) return "[文件] " + (content.file?.fileName ?? "");
+    if (content.emoji?.emojiId) return content.emoji.emojiId;
+    return "";
+  }
+
+  private mergeHistoryItem(item: any): void {
+    const id = item.msg_id;
+    if (!id || this.seen.has(id)) return;
+    const burned = this.burnedAt(item.server_time, item.burn_after_read_ttl_seconds);
+    const content = burned ? {} : this.parseContent(item.content_json);
+    const message: ChatMessage = {
+      msgId: id, clientMsgId: item.client_msg_id ?? "", convId: item.conv_id,
+      convType: item.conv_type === "GROUP" ? "GROUP" : "SINGLE", senderId: item.sender_id,
+      kind: (item.msg_type ?? "TEXT").replace("MSG_TYPE_", "") as MessageKind,
+      content, text: burned ? "消息已焚毁" : "",
+      convSeq: Number(item.conv_seq), serverTime: Number(item.server_time),
+      state: item.recalled ? "recalled" : burned ? "burned"
+        : item.status === "MSG_STATUS_READ" ? "read" : "sent",
+      recalled: Boolean(item.recalled), restricted: Boolean(item.restricted),
+      isRequest: Boolean(item.is_request), replyToMsgId: item.reply_to_msg_id || undefined,
+      replySnapshot: { senderId: item.reply_sender_id, senderName: item.reply_sender_name, digest: item.reply_digest },
+      mentions: [], burnAfterReadTtlSeconds: Number(item.burn_after_read_ttl_seconds ?? 0),
+    };
+    if (!burned) message.text = this.messageText(message.content, MSG_TYPE_VALUE[message.kind]);
+    this.seen.add(id);
+    this.appendLocal(message);
+    this.reorder(message.convId);
+  }
+  private parseContent(value: string): Record<string, any> {
+    try { return JSON.parse(value || "{}"); } catch { return {}; }
+  }
+
+  private optimisticConversation(convId: string, patch: { pinned?: boolean; muted?: boolean }): void {
+    const key = `phantom.conversations.${this.appId}.${this.opts?.userId ?? "anonymous"}`;
+    this.writeJson(key + ".rollback." + convId, patch);
+  }
+  private rollbackConversation(convId: string, patch: { pinned?: boolean; muted?: boolean }): void {
+    const key = `phantom.conversations.${this.appId}.${this.opts?.userId ?? "anonymous"}.rollback.${convId}`;
+    const previous = this.readJson<Record<string, unknown>>(key);
+    if (previous) this.emit("conversation", { type: "OPTIMISTIC_ROLLBACK", convId, previous });
+    this.removeKey(key);
+  }
+
+  private appendLocal(message: ChatMessage): void {
+    const messages = this.messages.get(message.convId) ?? [];
+    messages.push(message);
+    this.messages.set(message.convId, messages);
     this.persistStore();
   }
-  private reorder(convId: string) {
-    const arr = this.store.get(convId);
-    if (arr) arr.sort((a, b) => (a.convSeq || 0) - (b.convSeq || 0) || a.serverTime - b.serverTime);
+  private sanitizeStoredMessage(message: ChatMessage): ChatMessage {
+    const state = message.state === "sending" ? "failed" : message.state;
+    if (!this.burnedAt(message.serverTime, message.burnAfterReadTtlSeconds)) return { ...message, state };
+    return { ...message, state: "burned", content: {}, text: "消息已焚毁" };
+  }
+  private reorder(convId: string): void {
+    const messages = this.messages.get(convId);
+    if (messages) messages.sort((a, b) => (a.convSeq || 0) - (b.convSeq || 0) || a.serverTime - b.serverTime);
     this.persistStore();
   }
 
-  // ---- 游标持久化 ----
-  private cursorKey(userId: string) { return `phantom.cursor.${this.appId}.${userId}`; }
+  private cursorKey(userId: string): string { return `phantom.cursor.${this.appId}.${userId}`; }
+  private messagesKey(userId: string): string { return `phantom.messages.${this.appId}.${userId}`; }
   private loadCursor(userId: string): number {
     try { return Number(localStorage.getItem(this.cursorKey(userId)) ?? 0); } catch { return 0; }
   }
-  private saveCursor() {
-    try { if (this.opts) localStorage.setItem(this.cursorKey(this.opts.userId), String(this.cursor)); } catch {}
+  private saveCursor(): void {
+    if (this.opts) this.writeJson(this.cursorKey(this.opts.userId), this.cursor);
   }
-  private messagesKey(userId: string) { return `phantom.messages.${this.appId}.${userId}`; }
-  private loadStore(userId: string) {
+  private loadStore(userId: string): void {
     if (this.storeUserId === userId) return;
-    this.store.clear();
+    this.messages.clear();
     this.seen.clear();
+    this.locallyDeleted.clear();
     this.storeUserId = userId;
     try {
       const raw = localStorage.getItem(this.messagesKey(userId));
       if (!raw) return;
-      const saved = JSON.parse(raw) as Record<string, ChatMessage[]>;
-      for (const [convId, messages] of Object.entries(saved)) {
-        if (!Array.isArray(messages)) continue;
-        const valid = messages
-          .filter((m) => m && m.convId === convId && m.clientMsgId)
-          .map((m) => ({ ...m, state: m.state === "sending" ? "failed" : m.state }));
-        this.store.set(convId, valid);
-        for (const m of valid) if (m.msgId) this.seen.add(m.msgId);
+      const parsed = JSON.parse(raw) as { version?: number; messages?: Record<string, ChatMessage[]> } | Record<string, ChatMessage[]>;
+      const stored = "messages" in parsed && parsed.messages ? parsed.messages : parsed as Record<string, ChatMessage[]>;
+      for (const [convId, list] of Object.entries(stored)) {
+        if (!Array.isArray(list)) continue;
+        const valid = list.filter((message) => message?.convId === convId && message.clientMsgId)
+          .map((message) => this.sanitizeStoredMessage(message));
+        this.messages.set(convId, valid);
+        for (const message of valid) if (message.msgId) this.seen.add(message.msgId);
         this.reorder(convId);
       }
     } catch {
-      this.store.clear();
+      this.messages.clear();
       this.seen.clear();
     }
   }
-  private persistStore() {
-    if (!this.opts || !this.storeUserId) return;
-    try {
-      localStorage.setItem(this.messagesKey(this.storeUserId), JSON.stringify(Object.fromEntries(this.store)));
-    } catch {}
+  private persistStore(): void {
+    if (!this.storeUserId) return;
+    this.writeJson(this.messagesKey(this.storeUserId), {
+      version: CACHE_VERSION,
+      messages: Object.fromEntries(this.messages),
+    });
   }
+  private writeJson(key: string, value: unknown): void {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
+  }
+  private readJson<T>(key: string): T | undefined {
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : undefined; }
+    catch { return undefined; }
+  }
+  private removeKey(key: string): void { try { localStorage.removeItem(key); } catch { /* noop */ } }
 }

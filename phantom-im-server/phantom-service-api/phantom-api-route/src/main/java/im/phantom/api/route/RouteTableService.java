@@ -21,6 +21,9 @@ public interface RouteTableService {
     /** 主动摘除：先比对 connId 再删，防旧连接迟到断连误删新连接。 */
     void remove(String userId, int deviceType, String connId);
 
+    /** 更新设备前台状态；实现须校验 connId 仍对应当前有效连接。 */
+    void updateForeground(String userId, int deviceType, String connId, boolean foreground, long now);
+
     /** 查询某用户全部在线端（至多 3 条：MOBILE/DESKTOP/WEB）。 */
     List<RouteEntry> query(String userId);
 }

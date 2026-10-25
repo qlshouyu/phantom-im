@@ -8,9 +8,14 @@ import im.phantom.common.Envelopes;
 import im.phantom.common.ErrorCodes;
 import im.phantom.common.gateway.CommandHandler;
 import im.phantom.common.gateway.SessionContext;
+import im.phantom.common.gateway.MessageAckHandler;
 import im.phantom.gateway.GatewayProperties;
 import im.phantom.gateway.auth.AuthService;
+import im.phantom.gateway.auth.AuthResponseFactory;
+import im.phantom.gateway.device.DeviceRegistryService;
+import im.phantom.api.config.AppConfigProvider;
 import im.phantom.infra.redis.AckCursorStore;
+import im.phantom.infra.redis.RedisRateLimiter;
 import im.phantom.proto.v1.AuthReq;
 import im.phantom.proto.v1.AuthResp;
 import im.phantom.proto.v1.Command;
@@ -24,8 +29,10 @@ import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -50,10 +57,22 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
     private final AckCursorStore ackCursor;
     private final GatewayProperties props;
     private final ScheduledExecutorService scheduler;
+    private final AuthResponseFactory authResponseFactory;
+    private final ObjectProvider<MessageAckHandler> ackHandlers;
+    private final PresenceRegistry presenceRegistry;
+    private final ObjectProvider<AppConfigProvider> appConfigs;
+    private final DeviceRegistryService deviceRegistry;
+    private final RedisRateLimiter rateLimiter;
 
     public PhantomWsHandler(AuthService authService, RouteTableService routeTable, UserSeqQuery userSeqQuery,
                             ConnectionRegistry registry, CommandDispatcher dispatcher, AckCursorStore ackCursor,
-                            GatewayProperties props, ScheduledExecutorService scheduler) {
+                            GatewayProperties props, ScheduledExecutorService scheduler,
+                            AuthResponseFactory authResponseFactory,
+                            ObjectProvider<MessageAckHandler> ackHandlers,
+                            PresenceRegistry presenceRegistry,
+                            ObjectProvider<AppConfigProvider> appConfigs,
+                            DeviceRegistryService deviceRegistry,
+                            RedisRateLimiter rateLimiter) {
         this.authService = authService;
         this.routeTable = routeTable;
         this.userSeqQuery = userSeqQuery;
@@ -62,6 +81,12 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
         this.ackCursor = ackCursor;
         this.props = props;
         this.scheduler = scheduler;
+        this.authResponseFactory = authResponseFactory;
+        this.ackHandlers = ackHandlers;
+        this.presenceRegistry = presenceRegistry;
+        this.appConfigs = appConfigs;
+        this.deviceRegistry = deviceRegistry;
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -107,6 +132,14 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
         String connId = (String) session.getAttributes().get(ATTR_CONN_ID);
         try {
             authService.verify(req.getAccessToken(), req.getAppId(), req.getUserId());
+            AppConfigProvider configs = appConfigs.getIfAvailable();
+            int maxDevices = configs == null ? 3 : configs.getConfig(req.getAppId()).maxDevices();
+            List<RouteEntry> currentRoutes = routeTable.query(req.getUserId());
+            boolean replacesSameType = currentRoutes.stream()
+                    .anyMatch(route -> route.deviceType() == req.getDeviceTypeValue());
+            if (!replacesSameType && currentRoutes.size() >= maxDevices) {
+                throw new BizException(ErrorCodes.DEVICE_LIMIT_EXCEEDED, "在线设备数量已达上限");
+            }
         } catch (BizException e) {
             reply(session, Envelopes.resp(Command.COMMAND_AUTH_RESP, env.getCid(), e.code(), null));
             closeQuietly(session, CloseStatus.NOT_ACCEPTABLE.withReason("auth failed"));
@@ -124,13 +157,13 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
                 req.getAppId(), connId, props.getId());
         session.getAttributes().put(ATTR_CTX, ctx);
         cancelAuthTimeout(session);
+        deviceRegistry.onAuthenticated(req.getUserId(), req.getDeviceId(), deviceType,
+                req.getPlatform(), now);
 
-        AuthResp resp = AuthResp.newBuilder()
-                .setServerTime(now)
-                .setMaxUserSeq(userSeqQuery.maxUserSeq(req.getUserId()))
-                .setHeartbeatIntervalS(props.getHeartbeatIntervalS())
-                .build();
+        AuthResp resp = authResponseFactory.build(req.getAppId(), now,
+                userSeqQuery.maxUserSeq(req.getUserId()), props.getHeartbeatIntervalS());
         reply(session, Envelopes.resp(Command.COMMAND_AUTH_RESP, env.getCid(), ErrorCodes.OK, resp));
+        presenceRegistry.userOnline(ctx);
         log.info("认证成功 user={} deviceType={} connId={}", req.getUserId(), deviceType, connId);
     }
 
@@ -154,6 +187,7 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
             case COMMAND_MSG_ACK -> {
                 MsgAck ack = MsgAck.parseFrom(env.getPayload());
                 ackCursor.advance(ctx.userId(), ctx.deviceId(), ack.getUserSeq());
+                ackHandlers.orderedStream().forEach(handler -> handler.onAck(ctx, ack.getUserSeq()));
                 // MSG_ACK 无需回帧
             }
             case COMMAND_LOGOUT_REQ -> {
@@ -162,6 +196,12 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
                 closeQuietly(session, CloseStatus.NORMAL);
             }
             default -> {
+                if (cmd == Command.COMMAND_SEND_MSG_REQ
+                        && !rateLimiter.allow("ws_send_message", ctx.appId() + ":" + ctx.userId(),
+                        120, 60).allowed()) {
+                    reply(session, Envelopes.resp(cmd, env.getCid(), ErrorCodes.RATE_LIMITED, null));
+                    return;
+                }
                 CommandHandler handler = dispatcher.find(cmd.getNumber());
                 if (handler == null) {
                     log.warn("无处理器的指令: {}", cmd);
@@ -182,6 +222,10 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
         SessionContext ctx = (SessionContext) session.getAttributes().get(ATTR_CTX);
         if (ctx != null) {
             routeTable.remove(ctx.userId(), ctx.deviceType(), ctx.connId());
+            presenceRegistry.userOffline(ctx);
+        }
+        if (connId != null) {
+            presenceRegistry.remove(connId);
         }
         if (connId != null) {
             registry.remove(connId);

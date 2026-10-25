@@ -4,6 +4,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /** 用户同步 Timeline 写入（扇出服务为唯一写入方）。 */
 @Repository
 public class UserTimelineWriteDao {
@@ -19,6 +21,11 @@ public class UserTimelineWriteDao {
         Integer n = jdbc.query("SELECT 1 FROM user_timeline WHERE user_id=? AND msg_id=? LIMIT 1",
                 rs -> rs.next() ? 1 : 0, userId, msgId);
         return n != null && n == 1;
+    }
+
+    public List<String> listParticipants(String convId) {
+        return jdbc.queryForList("SELECT user_id FROM conversation_member " +
+                "WHERE conv_id=? AND left_at IS NULL ORDER BY joined_at", String.class, convId);
     }
 
     /**

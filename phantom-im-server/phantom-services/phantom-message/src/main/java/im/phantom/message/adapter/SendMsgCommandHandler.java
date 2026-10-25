@@ -35,7 +35,7 @@ public class SendMsgCommandHandler implements CommandHandler {
     public Envelope handle(SessionContext ctx, Envelope req) throws Exception {
         SendMsgReq body = SendMsgReq.parseFrom(req.getPayload());
         try {
-            SendMsgResp resp = appService.handleSend(ctx.userId(), body);
+            SendMsgResp resp = appService.handleSend(ctx.appId(), ctx.userId(), body);
             return Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, req.getCid(), ErrorCodes.OK, resp);
         } catch (BizException e) {
             log.info("收单失败 code={} msg={}", e.code(), e.getMessage());

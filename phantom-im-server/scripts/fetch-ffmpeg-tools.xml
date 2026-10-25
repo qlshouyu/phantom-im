@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="fetch-ffmpeg-tools" default="fetch">
+  <property name="script.path" value="fetch-ffmpeg-tools.mjs"/>
+  <target name="fetch">
+    <exec executable="node" failonerror="true" dir="${project.dir}">
+      <arg value="${script.path}"/>
+    </exec>
+  </target>
+</project>

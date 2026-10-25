@@ -19,6 +19,7 @@ message NewMessageEvent {
   string conv_id = 2;
   int64 conv_seq = 3;
   string msg_id = 4;
+  bool is_request = 5;      // 非好友首条消息进入消息请求分区（SEC-14）
 }
 
 message RecallEvent {
@@ -57,6 +58,7 @@ message ConvStateEvent {
     CONV_STATE_FIELD_MUTED = 2;
     CONV_STATE_FIELD_DELETED = 3;
     CONV_STATE_FIELD_MARKED_READ = 4;
+    CONV_STATE_FIELD_READ_ONLY = 5;
   }
 }
 
@@ -72,6 +74,15 @@ message RelationEvent {
   RelationEventType type = 1;
   string peer_id = 2;
   UserLite peer = 3;
+  string request_id = 4;             // 好友申请 ID
+  string verification_message = 5;   // 验证消息，最多 30 字
+  int64 created_at = 6;
+  repeated string group_ids = 7;     // 好友所属分组（FRIEND_SETTING_CHANGED）
+  bool pinned = 8;                   // 特别关心（FRIEND_SETTING_CHANGED）
+  string remark = 9;                 // 好友备注（仅本人可见）
+  string group_id = 10;              // 分组事件目标
+  string group_name = 11;            // 分组事件新名称
+  bool group_deleted = 12;           // 分组是否已删除
 
   enum RelationEventType {
     RELATION_EVENT_TYPE_UNSPECIFIED = 0;
@@ -81,6 +92,10 @@ message RelationEvent {
     RELATION_EVENT_TYPE_FRIEND_DELETED = 4;   // 本人他端删除好友
     RELATION_EVENT_TYPE_BLACKLIST_ADDED = 5;  // 本人他端拉黑
     RELATION_EVENT_TYPE_BLACKLIST_REMOVED = 6;
+    RELATION_EVENT_TYPE_APPLY_IGNORED = 7;
+    RELATION_EVENT_TYPE_FRIEND_SETTING_CHANGED = 8;
+    RELATION_EVENT_TYPE_GROUP_CHANGED = 9;
+    RELATION_EVENT_TYPE_APPLY_SENT = 10;
   }
 }
 
@@ -102,6 +117,7 @@ message GroupEvent {
     GROUP_EVENT_TYPE_ANNOUNCEMENT = 6;
     GROUP_EVENT_TYPE_PROFILE_CHANGED = 7;   // 群名/头像
     GROUP_EVENT_TYPE_DISSOLVED = 8;
+    GROUP_EVENT_TYPE_NICKNAME_CHANGED = 9;  // 群名片变更，消息气泡与成员列表优先展示
   }
 }
 
@@ -126,6 +142,16 @@ message RestrictedDeliveryEvent {
   string template_id = 3;  // 如 "delivery.maybe_deleted" / "delivery.maybe_blocked"
 }
 
+// 举报处理结果（SEC-01~SEC-05）：只同步状态，不暴露内部审核规则和处置细节。
+message ReportEvent {
+  string report_id = 1;
+  string target_type = 2;
+  string target_id = 3;
+  string status = 4;          // RESOLVED / REJECTED
+  string template_id = 5;     // 如 "report.resolved"
+  int64 updated_at = 6;
+}
+
 message SyncEvent {
   int64 user_seq = 1;
   int64 event_time = 2;
@@ -140,7 +166,21 @@ message SyncEvent {
     GroupEvent group = 17;
     ProfileEvent profile = 18;
     RestrictedDeliveryEvent restricted_delivery = 19;
+    MsgStatusEvent msg_status = 20;
+    ReportEvent report = 21;
   }
+}
+
+// TOPIC_SYNC_EVENT 的 outbox 外包装；用户 ID 与事件 ID 用于路由和消费幂等。
+message SyncEventEnvelope {
+  string user_id = 1;
+  string event_id = 2;
+  SyncEvent event = 3;
+}
+
+// 通用同步事件在线推送；离线端仍通过 SyncReq 按 user_seq 补齐。
+message SyncEventPush {
+  SyncEvent event = 1;
 }
 
 // ---- 增量同步（MD-05，设计文档 4.3/4.4）----

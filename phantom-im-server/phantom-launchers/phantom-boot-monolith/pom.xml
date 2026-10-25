@@ -19,6 +19,18 @@
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-fanout</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-push</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-sync</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-user</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-openapi</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-relation</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-conversation</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-group</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-media</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-search</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-risk</artifactId></dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
     <!-- servlet 容器（WebSocket 依赖）显式声明 -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

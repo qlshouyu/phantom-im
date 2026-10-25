@@ -26,6 +26,16 @@ enum MsgType {
   MSG_TYPE_CALL_RECORD = 11; // 预留：Phase 2 音视频通话记录
 }
 
+// 消息状态机（MSG-09）。服务端下发时以该字段表示当前最终状态。
+enum MsgStatus {
+  MSG_STATUS_UNSPECIFIED = 0;
+  MSG_STATUS_SENDING = 1;
+  MSG_STATUS_SENT = 2;
+  MSG_STATUS_DELIVERED = 3;
+  MSG_STATUS_READ = 4;
+  MSG_STATUS_FAILED = 5;
+}
+
 message TextContent {
   string text = 1;
 }
@@ -131,6 +141,10 @@ message Msg {
   ReplySnapshot reply_snapshot = 11;
   repeated string mentions = 12;  // 被 @ 的 userId；哨兵值 "ALL" 表示 @全体（GC-13/14）
   bool recalled = 13;         // 下发时已合并撤回态（07 边界"撤回优先"）
+  MsgStatus status = 14;      // 当前消息状态（MSG-09），状态只能前进
+  bool restricted = 15;       // 受限投递（DC-16/18），不向接收者透出原因
+  uint32 burn_after_read_ttl_seconds = 16; // 阅后即焚 TTL；0 表示不启用
+  bool is_request = 17;       // 非好友首条消息进入消息请求分区（SEC-14）
 }
 
 // ---- 发送 ----
@@ -179,4 +193,12 @@ message RecallPush {
   string conv_id = 2;
   string operator_id = 3;  // 撤回操作者；系统风控撤回时为哨兵值 "SYSTEM"
   int64 user_seq = 4;
+}
+
+// 发送者侧消息状态变更：DELIVERED/READ 等状态只进不退（MSG-09）。
+message MsgStatusEvent {
+  string msg_id = 1;
+  string conv_id = 2;
+  MsgStatus status = 3;
+  int64 status_time = 4;
 }

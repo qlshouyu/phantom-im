@@ -4,6 +4,7 @@ import protobuf from "protobufjs";
 import { WebSocket } from "ws";
 import jwt from "jsonwebtoken";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,6 +12,7 @@ const PROTO_DIR = path.resolve(__dirname, "../../proto");
 const WS_URL = "ws://127.0.0.1:28080/ws";
 const APP_ID = "app_demo";
 const APP_SECRET = "phantom_demo_secret_please_change_0123456789";
+const HTTP_URL = "http://127.0.0.1:28080";
 
 // ---- 载入 proto ----
 const root = new protobuf.Root();
@@ -25,7 +27,8 @@ const Envelope = T("Envelope");
 const CMD = root.lookupEnum("phantom.v1.Command").values;
 const Msg = { AuthReq: T("AuthReq"), AuthResp: T("AuthResp"), Ping: T("Ping"), Pong: T("Pong"),
   SendMsgReq: T("SendMsgReq"), SendMsgResp: T("SendMsgResp"), MsgPush: T("MsgPush"), MsgAck: T("MsgAck"),
-  SyncReq: T("SyncReq"), SyncResp: T("SyncResp"), MsgContent: T("MsgContent") };
+  SyncReq: T("SyncReq"), SyncResp: T("SyncResp"), MsgContent: T("MsgContent"),
+  RecallMsgReq: T("RecallMsgReq"), RecallMsgResp: T("RecallMsgResp"), KickPush: T("KickPush") };
 
 const single = (a, b) => "si_" + [a, b].sort().join("__");
 const token = (userId) => jwt.sign({ app_id: APP_ID, user_id: userId }, APP_SECRET,
@@ -44,9 +47,35 @@ const waitOpen = (ws) => new Promise((resolve, reject) => {
   ws.once("error", reject);
 });
 
+function openApiHeaders(method, path, body) {
+  const timestamp = Date.now();
+  const signature = crypto.createHmac("sha256", APP_SECRET)
+    .update(method + path + body + timestamp).digest("hex");
+  return { "Content-Type": "application/json", "X-App-Id": APP_ID,
+    "X-Timestamp": String(timestamp), "X-Signature": signature };
+}
+async function openApi(method, path, body = undefined) {
+  const text = body === undefined ? "" : JSON.stringify(body);
+  const response = await fetch(HTTP_URL + path, { method,
+    headers: openApiHeaders(method, path, text), body: text || undefined });
+  const payload = await response.json();
+  if (!response.ok || payload.code !== 0) throw new Error(`${method} ${path}: ${payload.message}`);
+  return payload.data;
+}
+async function userApi(userId, method, path, body = undefined) {
+  const text = body === undefined ? "" : JSON.stringify(body);
+  const response = await fetch(HTTP_URL + path, { method, headers: {
+    Authorization: `Bearer ${token(userId)}`, "X-App-Id": APP_ID, "X-User-Id": userId,
+    "X-Device-Id": "dev-" + userId, "Content-Type": "application/json",
+  }, body: text || undefined });
+  const payload = await response.json();
+  if (!response.ok || payload.code !== 0) throw new Error(`${method} ${path}: ${payload.message}`);
+  return payload.data;
+}
+
 // ---- 极简客户端 ----
 class Client {
-  constructor(userId) { this.userId = userId; this.cid = 0; this.pending = new Map(); this.pushes = []; }
+  constructor(userId) { this.userId = userId; this.cid = 0; this.pending = new Map(); this.pushes = []; this.kicks = []; }
   connect() {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(WS_URL);
@@ -67,6 +96,8 @@ class Client {
       this.pushes.push(push);
       // 自动 ACK
       this._send(CMD.COMMAND_MSG_ACK, Msg.MsgAck.encode({ userSeq: push.userSeq }).finish());
+    } else if (env.cmd === CMD.COMMAND_KICK_PUSH) {
+      this.kicks.push(Msg.KickPush.decode(env.payload));
     }
   }
   _send(cmd, payload, cid = 0) {
@@ -86,9 +117,9 @@ class Client {
     const env = await this.request(CMD.COMMAND_AUTH_REQ, payload);
     return { code: env.code, resp: env.code === 0 ? Msg.AuthResp.decode(env.payload) : null };
   }
-  async sendText(convId, text, clientMsgId) {
+  async sendText(convId, text, clientMsgId, convType = 1) {
     const content = Msg.MsgContent.encode({ text: { text } }).finish();
-    const payload = Msg.SendMsgReq.encode({ clientMsgId, convId, convType: 1 /*SINGLE*/,
+    const payload = Msg.SendMsgReq.encode({ clientMsgId, convId, convType,
       msgType: 1 /*TEXT*/, content: Msg.MsgContent.decode(content) }).finish();
     const env = await this.request(CMD.COMMAND_SEND_MSG_REQ, payload);
     return { code: env.code, resp: env.code === 0 ? Msg.SendMsgResp.decode(env.payload) : null };
@@ -98,6 +129,10 @@ class Client {
     const env = await this.request(CMD.COMMAND_SYNC_REQ, payload);
     return Msg.SyncResp.decode(env.payload);
   }
+  async recall(msgId) {
+    const env = await this.request(CMD.COMMAND_RECALL_MSG_REQ, Msg.RecallMsgReq.encode({ msgId }).finish());
+    return { code: env.code, resp: env.code === 0 ? Msg.RecallMsgResp.decode(env.payload) : null };
+  }
   close() { try { this.ws.close(); } catch {} }
 }
 
@@ -106,8 +141,14 @@ const textOf = (push) => push.msg?.content?.text?.text;
 // ---- 场景 ----
 console.log("== Phantom IM M0 端到端冒烟 ==");
 const runId = Date.now().toString(36);
-const aliceId = `u_alice_${runId}`;
-const bobId = `u_bob_${runId}`;
+const aliceExternalId = `alice_${runId}`;
+const bobExternalId = `bob_${runId}`;
+
+// 业务用户前置：外部 ID 由 OpenAPI 映射为平台 Phantom ID，后续 Token 必须使用 Phantom ID。
+const aliceImported = await openApi("POST", "/openapi/users", { external_user_id: aliceExternalId });
+const bobImported = await openApi("POST", "/openapi/users", { external_user_id: bobExternalId });
+const aliceId = aliceImported.user_id ?? aliceImported.userId;
+const bobId = bobImported.user_id ?? bobImported.userId;
 const conv = single(aliceId, bobId);
 
 // 0) 连接网关边界（connection-gateway）
@@ -182,7 +223,41 @@ ok(!!synced, `SyncReq 补齐到离线消息 "offline msg" (userSeq=${synced?.use
   text: e.newMessage?.msg?.content?.text?.text,
 })))})`);
 
-alice.close(); bob2.close();
+// 5) 撤回（rich-messaging / MSG-11）
+const recallSend = await alice.sendText(conv, "recall me", "cm-recall");
+await sleep(500);
+const recalled = await alice.recall(recallSend.resp.msgId);
+ok(recalled.code === 0 && recalled.resp.msgId === recallSend.resp.msgId,
+  `2 分钟内撤回成功 msgId=${recallSend.resp.msgId}`);
+const recallAgain = await alice.recall(recallSend.resp.msgId);
+ok(recallAgain.code === 4004, `重复撤回返回 ALREADY_RECALLED code=${recallAgain.code}`);
+
+// 6) 群消息与群写扩散（GC-01 / GC-02）
+const carolImported = await openApi("POST", "/openapi/users", { external_user_id: `carol_${runId}` });
+const carolId = carolImported.user_id ?? carolImported.userId;
+for (const [from, to] of [[aliceId, bobId], [aliceId, carolId]]) {
+  await userApi(from, "POST", "/friends/requests", { to_user_id: to, verification_message: "smoke" });
+  const page = await userApi(to, "GET", "/friends/requests?include_handled=false");
+  const request = page.items.find((item) => item.from_user_id === from);
+  await userApi(to, "POST", `/friends/requests/${request.request_id}`, { action: "ACCEPT" });
+}
+const group = await userApi(aliceId, "POST", "/groups",
+  { name: "smoke-group", member_ids: [bobId, carolId] });
+ok(Boolean(group.conv_id && group.member_count === 3), `创建三人群 groupId=${group.group_id}`);
+const groupMessage = await alice.sendText(group.conv_id, "hello group", "cm-group", 2);
+ok(groupMessage.code === 0, `群消息收单成功 msgId=${groupMessage.resp?.msgId}`);
+await sleep(1500);
+ok(bob2.pushes.some((push) => textOf(push) === "hello group"), "群成员收到群消息");
+
+// 7) 同类型设备顶替（multi-device-session / MD-02）
+const aliceNewDevice = new Client(aliceId);
+await aliceNewDevice.connect();
+const replacement = await aliceNewDevice.auth(`dev-replaced-${runId}`);
+await sleep(500);
+ok(replacement.code === 0 && alice.kicks.some((kick) => kick.reason === 1),
+  "同类型新连接踢出旧连接 SAME_TYPE_LOGIN");
+
+aliceNewDevice.close(); bob2.close();
 await sleep(300);
 console.log(`\n== 结果：${PASS} 通过 / ${FAIL} 失败 ==`);
 process.exit(FAIL === 0 ? 0 : 1);

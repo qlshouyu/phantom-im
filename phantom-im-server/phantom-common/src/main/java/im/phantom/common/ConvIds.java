@@ -12,6 +12,7 @@ public final class ConvIds {
     private ConvIds() {}
 
     public static final String SINGLE_PREFIX = "si_";
+    public static final String GROUP_PREFIX = "gr_";
     private static final String SEP = "__";
 
     /** 由双方 userId 生成单聊 conv_id（顺序无关）。 */
@@ -23,6 +24,18 @@ public final class ConvIds {
 
     public static boolean isSingle(String convId) {
         return convId != null && convId.startsWith(SINGLE_PREFIX) && convId.contains(SEP);
+    }
+
+    /** 群聊 conv_id 由 group_id 稳定派生。 */
+    public static String group(String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            throw new IllegalArgumentException("groupId 不能为空");
+        }
+        return GROUP_PREFIX + groupId;
+    }
+
+    public static boolean isGroup(String convId) {
+        return convId != null && convId.startsWith(GROUP_PREFIX);
     }
 
     /** 从单聊 conv_id 解析双方成员 [uidMin, uidMax]。 */

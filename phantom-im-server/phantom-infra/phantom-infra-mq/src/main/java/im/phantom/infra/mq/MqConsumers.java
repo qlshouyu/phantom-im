@@ -7,6 +7,7 @@ import org.apache.rocketmq.client.apis.consumer.ConsumeResult;
 import org.apache.rocketmq.client.apis.consumer.FilterExpression;
 import org.apache.rocketmq.client.apis.consumer.FilterExpressionType;
 import org.apache.rocketmq.client.apis.consumer.PushConsumer;
+import im.phantom.infra.observability.PlatformMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,10 +26,12 @@ public class MqConsumers implements AutoCloseable {
 
     private final ClientServiceProvider provider = ClientServiceProvider.loadService();
     private final MqProperties props;
+    private final PlatformMetrics metrics;
     private final List<PushConsumer> started = new ArrayList<>();
 
-    public MqConsumers(MqProperties props) {
+    public MqConsumers(MqProperties props, PlatformMetrics metrics) {
         this.props = props;
+        this.metrics = metrics;
     }
 
     public synchronized void newConsumer(String group, String topic, String tag,
@@ -46,8 +49,13 @@ public class MqConsumers implements AutoCloseable {
                         ByteBuffer bb = view.getBody();
                         byte[] body = new byte[bb.remaining()];
                         bb.get(body);
-                        return handler.handle(body) ? ConsumeResult.SUCCESS : ConsumeResult.FAILURE;
+                        boolean success = handler.handle(body);
+                        if (!success) {
+                            metrics.recordConsumerFailure(group, topic);
+                        }
+                        return success ? ConsumeResult.SUCCESS : ConsumeResult.FAILURE;
                     } catch (Exception e) {
+                        metrics.recordConsumerFailure(group, topic);
                         log.warn("消费失败，稍后重试 group={}: {}", group, e.toString());
                         return ConsumeResult.FAILURE;
                     }

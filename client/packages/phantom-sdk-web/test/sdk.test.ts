@@ -280,4 +280,154 @@ describe("PhantomClient", () => {
     await second.login({ userToken: "token", userId: "u_bob", deviceId: "dev-1" });
     expect(second.getMessages(convId).map((m) => m.msgId)).toEqual(["m_1", "m_2"]);
   });
+
+  it("同步撤回事件把本地消息替换为撤回态", async () => {
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const ws = FakeWebSocket.instances[0];
+    const convId = singleConvId("u_alice", "u_bob");
+    push(ws, 1, msg({ msgId: "m_recall", convId, convSeq: 1 }));
+
+    const event = { userSeq: 2, eventTime: 2000, recall: { msgId: "m_recall", convId, operatorId: "u_bob" } };
+    const payload = P.SyncEventPush.encode({ event }).finish();
+    ws.serverSend(P.Envelope.encode({ cmd: P.Command.COMMAND_SYNC_EVENT_PUSH, cid: 0, code: 0, payload }).finish());
+
+    expect(client.getMessages(convId)[0].state).toBe("recalled");
+    expect(client.getMessages(convId)[0].text).toContain("撤回");
+  });
+
+  it("系统消息按模板渲染且阅后即焚过期后只保留墓碑", async () => {
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const ws = FakeWebSocket.instances[0];
+    const convId = singleConvId("u_alice", "u_bob");
+
+    push(ws, 1, {
+      ...msg({ msgId: "m_system", convId, convSeq: 1 }),
+      msgType: 10,
+      content: { system: { templateId: "group.created", params: { operator_name: "Alice" } } },
+    });
+    push(ws, 2, {
+      ...msg({ msgId: "m_burn", convId, convSeq: 2, text: "secret" }),
+      serverTime: Date.now() - 2_000,
+      burnAfterReadTtlSeconds: 1,
+    });
+
+    const messages = client.getMessages(convId);
+    expect(messages[0].text).toBe("Alice 创建了群聊");
+    expect(messages[1].state).toBe("burned");
+    expect(messages[1].text).toBe("消息已焚毁");
+    expect(messages[1].content).toEqual({});
+  });
+
+  it("通知点击携带深链信息并触发宿主事件", () => {
+    const client = newClient();
+    const clicked = vi.fn();
+    client.on("notificationClick", clicked);
+    client.handleNotificationClick({ conv_id: "c1", deep_link: "phantom://conversation/c1" });
+    expect(clicked).toHaveBeenCalledWith({
+      conv_id: "c1", deep_link: "phantom://conversation/c1",
+    });
+  });
+
+  it("联想搜索防抖只提交最后一次输入", async () => {
+    vi.useFakeTimers();
+    const queries: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/search/suggest") queries.push(url.searchParams.get("q") ?? "");
+      return Response.json({ code: 0, data: { contacts: [], groups: [], total: 0 } });
+    }) as unknown as typeof fetch;
+    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+
+    client.searchSuggestionsDebounced("a", 300);
+    const second = client.searchSuggestionsDebounced("ab", 300);
+    await vi.advanceTimersByTimeAsync(300);
+    await second;
+
+    expect(queries).toEqual(["ab"]);
+  });
+
+  it("媒体上传从已传分片继续并只上传剩余分片", async () => {
+    const calls: Array<{ method: string; path: string; body?: any }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      calls.push({ method, path: url.pathname, body: init?.body });
+      if (url.pathname === "/media/upload/init") {
+        return Response.json({ code: 0, data: {
+          uploadId: "upload_1", partSize: 2, sizeBytes: 6, totalParts: 3,
+          uploadedParts: [1], instant: false,
+        } });
+      }
+      if (url.pathname.endsWith("/complete")) {
+        return Response.json({ code: 0, data: {
+          uploadId: "", partSize: 2, sizeBytes: 6, totalParts: 3, uploadedParts: [1, 2, 3],
+          instant: false, mediaId: "media_1", url: "/media/media_1/content",
+        } });
+      }
+      return Response.json({ code: 0, data: { uploadId: "upload_1", partNumber: 2 } });
+    }) as unknown as typeof fetch;
+    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const progress: number[] = [];
+    const result = await client.uploadMedia(new Blob(["abcdef"]), {
+      fileName: "a.txt", sha256: "a".repeat(64), mediaType: "FILE",
+      onProgress: (uploaded) => progress.push(uploaded),
+    });
+
+    expect(result.mediaId).toBe("media_1");
+    expect(calls.filter((call) => call.path.includes("/part/")).map((call) => call.path))
+      .toEqual(["/media/upload/upload_1/part/2", "/media/upload/upload_1/part/3"]);
+    expect(progress).toEqual([4, 6]);
+  });
+
+  it("会话乐观更新失败时发出回滚事件", async () => {
+    const fetchMock = vi.fn(async () => Response.json(
+      { code: 1001, message: "rejected", data: null }, { status: 400 })) as unknown as typeof fetch;
+    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const rollback = vi.fn();
+    client.on("conversation", rollback);
+    await expect(client.updateConversation("si_a__b", { pinned: true })).rejects.toThrow("rejected");
+    expect(rollback).toHaveBeenCalledWith(expect.objectContaining({ type: "OPTIMISTIC_ROLLBACK" }));
+  });
+
+  it("退出登录清理游标和本地消息", async () => {
+    const convId = singleConvId("u_alice", "u_bob");
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws, 1);
+      else if (env.cmd === P.Command.COMMAND_SYNC_REQ) {
+        const bytes = P.SyncResp.encode({ events: [{ userSeq: 1, eventTime: 1000,
+          newMessage: { msg: msg({ msgId: "m_logout", convId }), convId, convSeq: 1, msgId: "m_logout" } }],
+          maxUserSeq: 1, hasMore: false }).finish();
+        response(ws, P.Command.COMMAND_SYNC_RESP, Number(env.cid), bytes);
+      }
+    };
+    const client = newClient();
+    await login(client);
+    expect(memory.has(`phantom.cursor.${APP_ID}.u_bob`)).toBe(true);
+    client.logout();
+    expect(memory.has(`phantom.cursor.${APP_ID}.u_bob`)).toBe(false);
+    expect(memory.has(`phantom.messages.${APP_ID}.u_bob`)).toBe(false);
+  });
 });

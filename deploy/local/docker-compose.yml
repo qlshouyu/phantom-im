@@ -3,7 +3,7 @@
 # 用法：docker compose -f deploy/local/docker-compose.yml up -d
 services:
   mysql:
-    image: mysql:8.0
+    image: registry.cn-hangzhou.aliyuncs.com/egojit/mysql:8.0.46
     container_name: phantom-mysql
     ports:
       - "3306:3306"
