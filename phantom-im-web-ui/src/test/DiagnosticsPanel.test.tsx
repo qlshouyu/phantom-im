@@ -7,7 +7,7 @@ describe("diagnostics panel", () => {
   beforeEach(() => {
     useAppStore.setState({
       account: { account_id: "a", phantom_user_id: "u", login_name: "alice", nickname: "Alice" },
-      connection: "online",
+      connection: { status: "online", kickedReason: null },
       diagnostics: [{ id: "1", at: Date.now(), type: "sync", detail: "{\"type\":\"SYNC\"}" }],
     });
   });

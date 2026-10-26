@@ -21,6 +21,7 @@
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-api-device</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-redis</artifactId></dependency>
     <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-db</artifactId></dependency>
+    <dependency><groupId>im.phantom</groupId><artifactId>phantom-infra-observability</artifactId></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-websocket</artifactId>

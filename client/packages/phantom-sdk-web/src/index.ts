@@ -112,6 +112,7 @@ const SEND_TIMEOUT_MS = 15_000;
 const HEARTBEAT_MS = 25_000;
 const MAX_BACKOFF_MS = 60_000;
 const CACHE_VERSION = 3;
+const PERSIST_DELAY_MS = 200;
 
 class Emitter {
   private map = new Map<string, Function[]>();
@@ -153,6 +154,9 @@ export class PhantomClient extends Emitter {
   private appConfig?: Record<string, any>;
   private searchSequence = 0;
   private searchTimer: any;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistPending = false;
+  private readonly pagehideHandler = () => this.flushPersistence();
 
   constructor(options: { url: string; appId: string; httpBaseUrl?: string; fetch?: typeof fetch }) {
     super();
@@ -160,6 +164,9 @@ export class PhantomClient extends Emitter {
     this.appId = options.appId;
     this.httpBaseUrl = options.httpBaseUrl ?? options.url.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("pagehide", this.pagehideHandler);
+    }
   }
 
   getState(): ConnState { return this.state; }
@@ -168,6 +175,7 @@ export class PhantomClient extends Emitter {
   getMessages(convId: string): ChatMessage[] { return [...(this.messages.get(convId) ?? [])]; }
 
   async login(options: LoginOptions): Promise<void> {
+    this.flushPersistence();
     this.opts = options;
     this.kicked = false;
     this.authFailed = false;
@@ -361,6 +369,19 @@ export class PhantomClient extends Emitter {
       durationSeconds: media.duration_seconds ?? media.durationSeconds,
       fileName: media.file_name ?? media.fileName,
     };
+  }
+
+  /** 使用当前登录用户的短时签名读取媒体内容，适用于 <img>/<video> 等无法附加自定义头的场景。 */
+  async getMediaContent(mediaId: string, variant: "original" | "thumb" = "thumb"): Promise<Blob> {
+    const media = await this.getMedia(mediaId);
+    const path = variant === "thumb" ? media.thumbUrl ?? media.url : media.url;
+    if (!path) throw new Error("media url missing");
+    const response = await this.fetchImpl(`${this.httpBaseUrl}${path}`, {
+      method: "GET",
+      headers: this.httpHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.blob();
   }
 
   private normalizeUpload(value: any): UploadSession {
@@ -572,6 +593,7 @@ export class PhantomClient extends Emitter {
   }
 
   logout(): void {
+    this.flushPersistence();
     this.kicked = true;
     this.stopHeartbeat();
     try { this.ws?.close(); } catch { /* noop */ }
@@ -793,15 +815,19 @@ export class PhantomClient extends Emitter {
   }
   private protocolError(code: number): Error { return new Error("protocol error code=" + code); }
 
-  private async http<T = any>(method: string, path: string, body?: any,
-                              options: { signal?: AbortSignal } = {}): Promise<T> {
+  private httpHeaders(): Record<string, string> {
     if (!this.opts) throw new Error("not logged in");
-    const headers: Record<string, string> = {
+    return {
       Authorization: `Bearer ${this.opts.userToken}`,
       "X-App-Id": this.appId,
       "X-User-Id": this.opts.userId,
       "X-Device-Id": this.opts.deviceId,
     };
+  }
+
+  private async http<T = any>(method: string, path: string, body?: any,
+                              options: { signal?: AbortSignal } = {}): Promise<T> {
+    const headers = this.httpHeaders();
     const init: RequestInit = { method, headers, signal: options.signal };
     if (body instanceof Uint8Array) {
       headers["Content-Type"] = "application/octet-stream";
@@ -943,10 +969,10 @@ export class PhantomClient extends Emitter {
     if (!this.burnedAt(message.serverTime, message.burnAfterReadTtlSeconds)) return { ...message, state };
     return { ...message, state: "burned", content: {}, text: "消息已焚毁" };
   }
-  private reorder(convId: string): void {
+  private reorder(convId: string, persist = true): void {
     const messages = this.messages.get(convId);
     if (messages) messages.sort(compareMessages);
-    this.persistStore();
+    if (persist) this.persistStore();
   }
 
   private cursorKey(userId: string): string { return `phantom.cursor.${this.appId}.${userId}`; }
@@ -974,7 +1000,7 @@ export class PhantomClient extends Emitter {
           .map((message) => this.sanitizeStoredMessage(message));
         this.messages.set(convId, valid);
         for (const message of valid) if (message.msgId) this.seen.add(message.msgId);
-        this.reorder(convId);
+        this.reorder(convId, false);
       }
     } catch {
       this.messages.clear();
@@ -983,6 +1009,22 @@ export class PhantomClient extends Emitter {
   }
   private persistStore(): void {
     if (!this.storeUserId) return;
+    this.persistPending = true;
+    if (this.persistTimer !== null) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.flushPersistence();
+    }, PERSIST_DELAY_MS);
+  }
+
+  /** 页面隐藏、退出登录或宿主显式刷新前调用；同步写入最新完整有序缓存。 */
+  flushPersistence(): void {
+    if (this.persistTimer !== null) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (!this.persistPending || !this.storeUserId) return;
+    this.persistPending = false;
     this.writeJson(this.messagesKey(this.storeUserId), {
       version: CACHE_VERSION,
       messages: Object.fromEntries(this.messages),

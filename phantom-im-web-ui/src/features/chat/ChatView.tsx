@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "@phantom/sdk-web";
-import { getClient, loadConversations, loadOlder, openConversation, sendFile, sendText } from "../../services/sdk-adapter";
+import {
+  getClient, loadConversations, loadMediaThumbnail, loadOlder, openConversation, sendFile, sendText,
+} from "../../services/sdk-adapter";
 import { useAppStore } from "../../store/app-store";
 import type { Conversation } from "../../types";
 
@@ -12,6 +14,41 @@ function messageContent(message: ChatMessage): string {
   if (message.recalled) return "消息已撤回";
   if (message.state === "burned") return "消息已焚毁";
   return message.text || `[${message.kind}]`;
+}
+
+function ImageMessage({ message }: { message: ChatMessage }) {
+  const image = message.content?.image ?? {};
+  const mediaId = String(image.mediaId ?? image.media_id ?? "");
+  const width = Number(image.width ?? 0);
+  const height = Number(image.height ?? 0);
+  const [source, setSource] = useState("");
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!mediaId) return;
+    let active = true;
+    let objectUrl = "";
+    setSource("");
+    setFailed(false);
+    loadMediaThumbnail(mediaId).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      if (active) setSource(objectUrl);
+      else URL.revokeObjectURL(objectUrl);
+    }).catch(() => {
+      if (active) setFailed(true);
+    });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mediaId]);
+
+  if (!mediaId || failed) return <p>{failed ? "[图片加载失败]" : messageContent(message)}</p>;
+  if (!source) return <p className="image-placeholder">[图片加载中…]</p>;
+  return (
+    <img className="message-image" data-testid="message-image" src={source} alt="图片消息"
+      width={width > 0 ? width : undefined} height={height > 0 ? height : undefined} />
+  );
 }
 
 export function ChatView() {
@@ -85,15 +122,17 @@ export function ChatView() {
     setInput("");
     setQuoteTarget(null);
     setDraft(activeConvId, "");
-    // 新单聊在第一条消息前可能还没有服务端会话/草稿，清草稿失败不能阻塞发送。
-    await getClient().clearDraft(activeConvId).catch(() => undefined);
+    // 先发起发送以立即展示乐观消息；草稿清理只做后台 best-effort。
+    const sending = sendText(activeConvId, text, target);
+    void getClient().clearDraft(activeConvId).catch(() => undefined);
     try {
-      const message = await sendText(activeConvId, text, target);
+      const message = await sending;
       upsertMessage(message);
       getClient().sendTyping(activeConvId, false).catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "发送失败");
       setInput(text);
+      getClient().saveDraft(activeConvId, text).catch(() => undefined);
     }
   }
 
@@ -274,7 +313,9 @@ export function ChatView() {
                     data-testid="message" data-msg-id={message.msgId} data-conv-seq={message.convSeq}
                     className={`${self ? "message self" : "message peer"}${highlightConvSeq === message.convSeq ? " highlighted" : ""}`}>
                     {message.replyToMsgId && <div className="quote" data-testid="quoted-message">引用 {message.replySnapshot?.digest ?? message.replyToMsgId}</div>}
-                    <p>{messageContent(message)}</p>
+                    {message.kind === "IMAGE" && !message.recalled && message.state !== "burned"
+                      ? <ImageMessage message={message} />
+                      : <p>{messageContent(message)}</p>}
                     <small>{self ? "我" : message.senderId} · {message.state} · seq={message.convSeq || "-"}{message.restricted ? " · 可能未送达" : ""}</small>
                     <div className="message-actions">
                       {message.msgId && <button onClick={() => setSelectedMsgIds((current) => {

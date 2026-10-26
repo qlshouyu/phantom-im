@@ -56,6 +56,7 @@
 | 推送 | GET/PUT | `/push/settings` | 推送总开关与预览开关 |
 | 搜索 | GET | `/search` | 联系人、群组和聊天记录全局搜索 |
 | 搜索 | GET | `/search/suggest` | 联系人与群组联想搜索 |
+| 搜索 | POST | `/search/rebuild` | 显式重建当前用户的搜索索引 |
 | 合规 | POST/GET | `/reports` | 提交或查询举报 |
 | 合规 | POST/GET | `/appeals` | 提交或查询申诉 |
 | 合规 | POST/GET | `/account/export` | 申请或下载平台数据导出 |

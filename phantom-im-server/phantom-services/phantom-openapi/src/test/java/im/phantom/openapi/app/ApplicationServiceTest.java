@@ -1,5 +1,7 @@
 package im.phantom.openapi.app;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import im.phantom.openapi.security.AppSecretCipher;
 import im.phantom.api.config.AppFeatureConfigDto;
 import org.h2.jdbcx.JdbcDataSource;
@@ -27,7 +29,8 @@ class ApplicationServiceTest {
         jdbc.execute("""
                 CREATE TABLE app_config(app_id VARCHAR(64) PRIMARY KEY, relation_hosted BOOLEAN,
                   read_receipt_enabled BOOLEAN, burn_after_read_enabled BOOLEAN,
-                  burn_after_read_ttl_seconds INT, sdk_profile_write_enabled BOOLEAN,
+                  burn_after_read_ttl_seconds INT, risk_check_enabled BOOLEAN,
+                  sdk_profile_write_enabled BOOLEAN,
                   max_devices INT, updated_at BIGINT)
                 """);
         jdbc.execute("""
@@ -92,10 +95,23 @@ class ApplicationServiceTest {
     @Test
     void updatesAndReadsApplicationFeatureConfig() {
         var created = service.create("Demo");
-        var updated = new AppFeatureConfigDto(false, false, true, 30, false, 2);
+        var updated = new AppFeatureConfigDto(false, false, true, 30, false, 2, true);
 
         assertThat(service.updateFeatures(created.appId(), updated)).isEqualTo(updated);
         assertThat(service.features(created.appId())).isEqualTo(updated);
         assertThat(new DatabaseAppConfigProvider(repository).getConfig(created.appId())).isEqualTo(updated);
+    }
+
+    @Test
+    void oldClientPayloadWithoutRiskFlagDefaultsToDisabled() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+
+        AppFeatureConfigDto config = mapper.readValue("""
+                {"relation_hosted":true,"read_receipt_enabled":true,
+                 "burn_after_read_enabled":false,"burn_after_read_ttl_seconds":0,
+                 "sdk_profile_write_enabled":true,"max_devices":3}
+                """, AppFeatureConfigDto.class);
+
+        assertThat(config.riskCheckEnabled()).isFalse();
     }
 }

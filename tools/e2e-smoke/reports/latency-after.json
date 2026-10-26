@@ -1,0 +1,85 @@
+{
+  "benchmark": "phantom-im-1v1-online-latency",
+  "label": "after",
+  "timestamp": "2026-10-25T08:56:50.802Z",
+  "passed": true,
+  "enforce": true,
+  "environment": {
+    "hostname": "lugao2MacBook-Pro.local",
+    "platform": "darwin 25.5.0",
+    "cpuModel": "Apple M5",
+    "cpuCount": 10,
+    "totalMemoryBytes": 25769803776,
+    "nodeVersion": "v26.8.2",
+    "httpUrl": "http://127.0.0.1:28080",
+    "wsUrl": "ws://127.0.0.1:28080/ws",
+    "appId": "app_demo",
+    "ratePerSecond": 20,
+    "warmupCount": 100,
+    "messageCount": 1000,
+    "jvmArgs": "-Xms512m -Xmx512m -XX:+UseG1GC -XX:+AlwaysPreTouch",
+    "profile": "production-like"
+  },
+  "thresholds": {
+    "sendRespP95Ms": 50,
+    "receiverE2eP95Ms": 100,
+    "receiverE2eP99Ms": 200
+  },
+  "thresholdChecks": {
+    "sendRespP95": true,
+    "receiverE2eP95": true,
+    "receiverE2eP99": true
+  },
+  "sampleCount": 1000,
+  "failureCount": 0,
+  "failures": [],
+  "stages": {
+    "sendResp": {
+      "samples": 1000,
+      "p50": 6.53,
+      "p95": 12.67,
+      "p99": 86.63,
+      "max": 238.01
+    },
+    "receiverE2e": {
+      "samples": 1000,
+      "p50": 18.02,
+      "p95": 31.3,
+      "p99": 127.86,
+      "max": 293.99
+    }
+  },
+  "actuatorMetrics": {
+    "before": {
+      "stage": null,
+      "outbox": [
+        {
+          "statistic": "VALUE",
+          "value": "NaN"
+        }
+      ]
+    },
+    "after": {
+      "stage": [
+        {
+          "statistic": "COUNT",
+          "value": 27332
+        },
+        {
+          "statistic": "TOTAL_TIME",
+          "value": 1531.7737668910002
+        },
+        {
+          "statistic": "MAX",
+          "value": 5.552
+        }
+      ],
+      "outbox": [
+        {
+          "statistic": "VALUE",
+          "value": "NaN"
+        }
+      ]
+    }
+  }
+}

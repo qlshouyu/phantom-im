@@ -64,6 +64,7 @@ public final class ApiRoutes {
     public static final String PUSH_SETTINGS = "/push/settings";
     public static final String SEARCH = "/search";
     public static final String SEARCH_SUGGEST = "/search/suggest";
+    public static final String SEARCH_REBUILD = "/search/rebuild";
     public static final String REPORTS = "/reports";
     public static final String APPEALS = "/appeals";
     public static final String ACCOUNT_EXPORT = "/account/export";

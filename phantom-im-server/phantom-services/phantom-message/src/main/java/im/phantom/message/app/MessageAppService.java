@@ -7,6 +7,7 @@ import im.phantom.common.Ids;
 import im.phantom.api.relation.RelationService;
 import im.phantom.api.relation.DirectMessagePolicy;
 import im.phantom.api.config.AppConfigProvider;
+import im.phantom.api.config.AppFeatureConfigDto;
 import im.phantom.api.message.ForwardMessageRequest;
 import im.phantom.api.message.MessageActionDto;
 import im.phantom.api.message.MessagePageDto;
@@ -19,8 +20,10 @@ import im.phantom.common.risk.ModerationRequest;
 import im.phantom.common.risk.UserSafetyChecker;
 import im.phantom.infra.mq.Topics;
 import im.phantom.infra.mq.TxMqProducer;
+import im.phantom.infra.observability.PlatformMetrics;
 import im.phantom.infra.redis.SeqAllocator;
 import im.phantom.message.infra.ConvTimelineDao;
+import im.phantom.message.MessagePublishProperties;
 import im.phantom.proto.v1.ConvType;
 import im.phantom.proto.v1.Msg;
 import im.phantom.proto.v1.MsgContent;
@@ -37,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +49,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import io.micrometer.core.instrument.Timer;
 
 /**
  * 收单用例（single-chat-messaging spec）：幂等 → 取号 → 落会话 Timeline → 事务消息。
@@ -62,6 +67,9 @@ public class MessageAppService implements MessageService {
     private final ObjectProvider<GroupService> groupServices;
     private final ObjectProvider<ContentModerationProvider> moderationProviders;
     private final ObjectProvider<UserSafetyChecker> safetyCheckers;
+    private final PlatformMetrics metrics;
+    private final MessagePublishProperties publishProperties;
+    private final MessagePersistenceService persistenceService;
     private static final com.google.protobuf.util.JsonFormat.Printer JSON =
             com.google.protobuf.util.JsonFormat.printer().omittingInsignificantWhitespace();
     private static final long RECALL_WINDOW_MS = 2L * 60L * 1000L;
@@ -73,7 +81,10 @@ public class MessageAppService implements MessageService {
                              MessageEventWriter eventWriter,
                              ObjectProvider<GroupService> groupServices,
                              ObjectProvider<ContentModerationProvider> moderationProviders,
-                             ObjectProvider<UserSafetyChecker> safetyCheckers) {
+                             ObjectProvider<UserSafetyChecker> safetyCheckers,
+                             PlatformMetrics metrics,
+                             MessagePublishProperties publishProperties,
+                             MessagePersistenceService persistenceService) {
         this.dao = dao;
         this.seqAllocator = seqAllocator;
         this.producer = producer;
@@ -83,10 +94,36 @@ public class MessageAppService implements MessageService {
         this.groupServices = groupServices;
         this.moderationProviders = moderationProviders;
         this.safetyCheckers = safetyCheckers;
+        this.metrics = metrics;
+        this.publishProperties = publishProperties == null ? new MessagePublishProperties() : publishProperties;
+        this.persistenceService = persistenceService;
+    }
+
+    MessageAppService(ConvTimelineDao dao, SeqAllocator seqAllocator, TxMqProducer producer,
+                      ObjectProvider<RelationService> relationServices,
+                      ObjectProvider<AppConfigProvider> configProviders,
+                      MessageEventWriter eventWriter,
+                      ObjectProvider<GroupService> groupServices,
+                      ObjectProvider<ContentModerationProvider> moderationProviders,
+                      ObjectProvider<UserSafetyChecker> safetyCheckers,
+                      PlatformMetrics metrics) {
+        this(dao, seqAllocator, producer, relationServices, configProviders, eventWriter, groupServices,
+                moderationProviders, safetyCheckers, metrics, new MessagePublishProperties(), null);
+    }
+
+    MessageAppService(ConvTimelineDao dao, SeqAllocator seqAllocator, TxMqProducer producer,
+                      ObjectProvider<RelationService> relationServices,
+                      ObjectProvider<AppConfigProvider> configProviders,
+                      MessageEventWriter eventWriter,
+                      ObjectProvider<GroupService> groupServices,
+                      ObjectProvider<ContentModerationProvider> moderationProviders,
+                      ObjectProvider<UserSafetyChecker> safetyCheckers) {
+        this(dao, seqAllocator, producer, relationServices, configProviders, eventWriter, groupServices,
+                moderationProviders, safetyCheckers, null);
     }
 
     MessageAppService(ConvTimelineDao dao, SeqAllocator seqAllocator, TxMqProducer producer) {
-        this(dao, seqAllocator, producer, null, null, null, null, null, null);
+        this(dao, seqAllocator, producer, null, null, null, null, null, null, null);
     }
 
     public SendMsgResp handleSend(String senderId, SendMsgReq req) throws Exception {
@@ -94,33 +131,68 @@ public class MessageAppService implements MessageService {
     }
 
     public SendMsgResp handleSend(String appId, String senderId, SendMsgReq req) throws Exception {
+        long started = System.nanoTime();
+        try {
+            SendMsgResp response = doHandleSend(appId, senderId, req);
+            if (metrics != null) {
+                metrics.recordMessageStage("send_total", "success", System.nanoTime() - started);
+            }
+            return response;
+        } catch (Exception error) {
+            if (metrics != null) {
+                metrics.recordMessageStage("send_total", "failure", System.nanoTime() - started);
+            }
+            throw error;
+        }
+    }
+
+    private SendMsgResp doHandleSend(String appId, String senderId, SendMsgReq req) throws Exception {
         String convId = req.getConvId();
         boolean single = ConvIds.isSingle(convId);
         boolean group = ConvIds.isGroup(convId);
         if (!single && !group) {
             throw new BizException(ErrorCodes.CONV_INVALID, "非法 conv_id: " + convId);
         }
-        MessageContentValidator.validate(req);
-        validateMediaReferences(appId, senderId, req);
-        assertCanSend(appId, senderId, convId);
-        ModerationReview moderationReview = moderate(appId, senderId, req);
-        ConvType expectedType = single ? ConvType.CONV_TYPE_SINGLE : ConvType.CONV_TYPE_GROUP;
-        DirectMessagePolicy policy = single
-                ? evaluateDirectMessage(appId, senderId, convId) : DirectMessagePolicy.ALLOWED;
-        if (single) {
-            authorizeSingleType(req);
+        AppFeatureConfigDto config = timed("config", () -> loadConfig(appId));
+        timed("basic_validation", () -> {
+            MessageContentValidator.validate(req);
+            validateMediaReferences(appId, senderId, req);
+            return null;
+        });
+        ModerationReview moderationReview;
+        if (config.riskCheckEnabled()) {
+            moderationReview = timed("risk", () -> {
+                assertCanSend(appId, senderId, convId);
+                return moderate(appId, senderId, req);
+            });
         } else {
-            authorizeGroupMessage(appId, senderId, convId, req);
+            moderationReview = null;
+            if (metrics != null) {
+                metrics.recordMessageStageSkipped("risk", "disabled");
+            }
         }
+        ConvType expectedType = single ? ConvType.CONV_TYPE_SINGLE : ConvType.CONV_TYPE_GROUP;
+        DirectMessagePolicy policy = timed("relation", () -> {
+            DirectMessagePolicy evaluated = single
+                    ? evaluateDirectMessage(appId, senderId, convId, config.relationHosted())
+                    : DirectMessagePolicy.ALLOWED;
+            if (single) {
+                authorizeSingleType(req);
+            } else {
+                authorizeGroupMessage(appId, senderId, convId, req);
+            }
+            return evaluated;
+        });
 
         // 1) 发送幂等：命中即返回首次结果（覆盖超时重发的常见顺序场景）
-        ConvTimelineDao.Existing existing = dao.findByClientMsgId(senderId, req.getClientMsgId());
+        ConvTimelineDao.Existing existing = timed("idempotency",
+                () -> dao.findByClientMsgId(senderId, req.getClientMsgId()));
         if (existing != null) {
             return respOf(existing);
         }
 
         // 2) 取号（会话粒度严格递增）
-        long convSeq = seqAllocator.nextConvSeq(convId);
+        long convSeq = timed("seq", () -> seqAllocator.nextConvSeq(convId));
         String msgId = Ids.newMsgId();
         long serverTime = System.currentTimeMillis();
 
@@ -138,25 +210,49 @@ public class MessageAppService implements MessageService {
                 .setRestricted(policy.restricted())
                 .setIsRequest(policy.messageRequest())
                 .addAllMentions(req.getMentionsList())
-                .setBurnAfterReadTtlSeconds(burnTtl(appId));
+                .setBurnAfterReadTtlSeconds(burnTtl(config));
         applyReply(req, convId, message);
         Msg msg = message.build();
 
-        // 3) 事务消息：half → 本地事务(落库+水位) → commit；失败/竞态转回查裁决
-        boolean committed = producer.sendInTransaction(
-                Topics.MSG_EVENT, Topics.TAG_NEW_MSG, convId, msgId, msg.toByteArray(),
-                () -> { dao.insert(msg); return true; });
+        // 3) 本地事务写 Timeline/扩展/水位；outbox 模式同时写新消息事件并立即返回。
+        boolean committed;
+        if (publishProperties.outboxEnabled()) {
+            if (persistenceService == null) {
+                throw new BizException(ErrorCodes.SERVER_ERROR, "消息 Outbox 持久化不可用");
+            }
+            try {
+                committed = timed("local_tx", () -> {
+                    persistenceService.persistWithOutbox(msg);
+                    return true;
+                });
+            } catch (DuplicateKeyException duplicate) {
+                committed = false;
+            }
+        } else {
+            committed = timed("local_tx", () -> producer.sendInTransaction(
+                    Topics.MSG_EVENT, Topics.TAG_NEW_MSG, convId, msgId, msg.toByteArray(),
+                    () -> {
+                        if (persistenceService != null) {
+                            persistenceService.persistTransactionMq(msg);
+                        } else {
+                            dao.insert(msg);
+                        }
+                        return true;
+                    }));
+        }
 
         if (!committed) {
             // 幂等竞态：唯一键拦截了本次插入，回查已 rollback；返回首次成功结果
-            ConvTimelineDao.Existing e2 = dao.findByClientMsgId(senderId, req.getClientMsgId());
+            ConvTimelineDao.Existing e2 = timed("idempotency_recheck",
+                    () -> dao.findByClientMsgId(senderId, req.getClientMsgId()));
             if (e2 != null) {
                 return respOf(e2);
             }
             throw new BizException(ErrorCodes.SERVER_ERROR, "消息未提交");
         }
 
-        log.info("收单成功 sender={} conv={} convSeq={} msgId={}", senderId, convId, convSeq, msgId);
+        log.info("收单成功 sender={} conv={} convSeq={} msgId={} clientMsgId={} publishMode={}",
+                senderId, convId, convSeq, msgId, req.getClientMsgId(), publishProperties.getPublishMode());
         if (moderationReview != null) {
             CompletableFuture.runAsync(() -> reviewModeration(moderationReview, msgId));
         }
@@ -164,7 +260,29 @@ public class MessageAppService implements MessageService {
                 .setMsgId(msgId).setConvSeq(convSeq).setServerTime(serverTime).build();
     }
 
-    private DirectMessagePolicy evaluateDirectMessage(String appId, String senderId, String convId) {
+    private <T> T timed(String stage, StageAction<T> action) throws Exception {
+        Timer.Sample sample = metrics == null ? null : metrics.startMessageStage();
+        try {
+            T value = action.run();
+            if (sample != null) {
+                metrics.recordMessageStage(sample, stage, "success");
+            }
+            return value;
+        } catch (Exception error) {
+            if (sample != null) {
+                metrics.recordMessageStage(sample, stage, "failure");
+            }
+            throw error;
+        }
+    }
+
+    @FunctionalInterface
+    private interface StageAction<T> {
+        T run() throws Exception;
+    }
+
+    private DirectMessagePolicy evaluateDirectMessage(String appId, String senderId, String convId,
+                                                      boolean relationHosted) {
         String[] participants = ConvIds.participants(convId);
         String receiverId = senderId.equals(participants[0]) ? participants[1]
                 : senderId.equals(participants[1]) ? participants[0] : null;
@@ -173,11 +291,11 @@ public class MessageAppService implements MessageService {
         }
         RelationService relations = relationServices == null ? null : relationServices.getIfAvailable();
         if (relations != null) {
-            DirectMessagePolicy policy = relations.evaluateDirectMessage(appId, senderId, receiverId);
+            DirectMessagePolicy policy = relations.evaluateDirectMessage(
+                    appId, senderId, receiverId, relationHosted);
             if (policy != null) {
                 return policy;
             }
-            relations.authorizeDirectMessage(appId, senderId, receiverId);
         }
         return DirectMessagePolicy.ALLOWED;
     }
@@ -294,12 +412,18 @@ public class MessageAppService implements MessageService {
         }
     }
 
-    private int burnTtl(String appId) {
-        AppConfigProvider configs = configProviders == null ? null : configProviders.getIfAvailable();
-        if (configs == null || appId == null) {
-            return 0;
+    private AppFeatureConfigDto loadConfig(String appId) {
+        if (appId == null) {
+            return AppFeatureConfigDto.defaults();
         }
-        var config = configs.getConfig(appId);
+        AppConfigProvider configs = configProviders == null ? null : configProviders.getIfAvailable();
+        if (configs == null) {
+            return AppFeatureConfigDto.defaults();
+        }
+        return configs.getConfig(appId);
+    }
+
+    private int burnTtl(AppFeatureConfigDto config) {
         return config.burnAfterReadEnabled() ? Math.max(0, config.burnAfterReadTtlSeconds()) : 0;
     }
 
@@ -431,15 +555,34 @@ public class MessageAppService implements MessageService {
     @Override
     @Transactional
     public void onDelivered(String receiverId, long userSeq) {
-        String msgId = dao.findNewMessageIdByUserSeq(receiverId, userSeq);
-        if (msgId == null) {
-            return;
+        Timer.Sample ackStage = metrics == null ? null : metrics.startMessageStage();
+        try {
+            String msgId = dao.findNewMessageIdByUserSeq(receiverId, userSeq);
+            if (msgId == null) {
+                if (ackStage != null) {
+                    metrics.recordMessageStage(ackStage, "ack", "missing");
+                }
+                return;
+            }
+            Msg message = dao.findByMsgId(msgId);
+            if (message == null || message.getRestricted() || message.getSenderId().equals(receiverId)) {
+                if (ackStage != null) {
+                    metrics.recordMessageStage(ackStage, "ack", "ignored");
+                }
+                return;
+            }
+            advanceAndNotify(message, MsgStatus.MSG_STATUS_DELIVERED);
+            if (ackStage != null) {
+                metrics.recordMessageStage(ackStage, "ack", "success");
+            }
+            log.debug("设备 ACK 处理完成 receiver={} userSeq={} msgId={} clientMsgId={}",
+                    receiverId, userSeq, msgId, message.getClientMsgId());
+        } catch (RuntimeException error) {
+            if (ackStage != null) {
+                metrics.recordMessageStage(ackStage, "ack", "failure");
+            }
+            throw error;
         }
-        Msg message = dao.findByMsgId(msgId);
-        if (message == null || message.getRestricted() || message.getSenderId().equals(receiverId)) {
-            return;
-        }
-        advanceAndNotify(message, MsgStatus.MSG_STATUS_DELIVERED);
     }
 
     @Override

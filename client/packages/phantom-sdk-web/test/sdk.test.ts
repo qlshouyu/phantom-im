@@ -106,6 +106,7 @@ describe("PhantomClient", () => {
     for (const client of clients) client.logout();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    delete (globalThis as any).window;
   });
 
   function newClient() {
@@ -147,6 +148,64 @@ describe("PhantomClient", () => {
 
     expect(client.getMessages(convId)).toHaveLength(1);
     expect(events).toHaveBeenCalledOnce();
+  });
+
+  it("单条消息的追加和重排合并为一次防抖持久化", async () => {
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    vi.useFakeTimers();
+    const setItem = vi.spyOn(localStorage, "setItem");
+    const ws = FakeWebSocket.instances[0];
+    const convId = singleConvId("u_alice", "u_bob");
+
+    push(ws, 10, msg({ msgId: "m_debounce", convId, convSeq: 1 }));
+    await vi.advanceTimersByTimeAsync(199);
+    expect(setItem.mock.calls.filter(([key]) => key.includes("phantom.messages."))).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(setItem.mock.calls.filter(([key]) => key.includes("phantom.messages."))).toHaveLength(1);
+  });
+
+  it("pagehide 时立即落盘待写入消息缓存", async () => {
+    const windowTarget = new EventTarget();
+    Object.defineProperty(globalThis, "window", { configurable: true, value: windowTarget });
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    const ws = FakeWebSocket.instances[0];
+    const convId = singleConvId("u_alice", "u_bob");
+
+    push(ws, 10, msg({ msgId: "m_pagehide", convId, convSeq: 1 }));
+    expect(memory.has(`phantom.messages.${APP_ID}.u_bob`)).toBe(false);
+    windowTarget.dispatchEvent(new Event("pagehide"));
+
+    expect(memory.get(`phantom.messages.${APP_ID}.u_bob`)).toContain("m_pagehide");
+  });
+
+  it("localStorage 写入失败不影响消息事件", async () => {
+    const client = newClient();
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    vi.useFakeTimers();
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new Error("quota exceeded");
+    });
+    const events = vi.fn();
+    client.on("message", events);
+    const convId = singleConvId("u_alice", "u_bob");
+
+    push(FakeWebSocket.instances[0], 10, msg({ msgId: "m_quota", convId, convSeq: 1 }));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(events).toHaveBeenCalledOnce();
+    expect(client.getMessages(convId)).toHaveLength(1);
   });
 
   it("自己消息服务端回推时按 client_msg_id 合并，不产生双气泡", async () => {
@@ -418,6 +477,36 @@ describe("PhantomClient", () => {
     expect(calls.filter((call) => call.path.includes("/part/")).map((call) => call.path))
       .toEqual(["/media/upload/upload_1/part/2", "/media/upload/upload_1/part/3"]);
     expect(progress).toEqual([4, 6]);
+  });
+
+  it("按当前用户获取缩略图签名并使用认证头读取图片内容", async () => {
+    const calls: Array<{ path: string; headers: HeadersInit | undefined }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      calls.push({ path: url.pathname + url.search, headers: init?.headers });
+      if (url.pathname === "/media/media_1") {
+        return Response.json({ code: 0, data: {
+          media_id: "media_1", url: "/media/media_1/content?variant=original",
+          thumb_url: "/media/media_1/content?variant=thumb",
+        } });
+      }
+      return new Response(new Blob(["thumb"], { type: "image/jpeg" }));
+    }) as unknown as typeof fetch;
+    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client, "u_alice");
+
+    const blob = await client.getMediaContent("media_1", "thumb");
+
+    expect(blob.type).toBe("image/jpeg");
+    expect(calls.filter((call) => call.path.startsWith("/media/")).map((call) => call.path)).toEqual([
+      "/media/media_1",
+      "/media/media_1/content?variant=thumb",
+    ]);
+    expect(new Headers(calls[1].headers).get("X-User-Id")).toBe("u_alice");
   });
 
   it("会话乐观更新失败时发出回滚事件", async () => {

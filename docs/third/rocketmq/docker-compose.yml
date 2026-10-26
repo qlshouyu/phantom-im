@@ -63,7 +63,7 @@ services:
     networks:
       - rocketmq
     restart: "no"
-    entrypoint: ["sh", "-c", "sleep 8; for topic in TOPIC_MSG_EVENT TOPIC_SYNC_EVENT TOPIC_PUSH_EVENT TOPIC_SEARCH_INDEX TOPIC_RISK_AUDIT TOPIC_MEDIA_CLEANUP; do until sh mqadmin updateTopic -n rmqnamesrv:9876 -c DefaultCluster -t $$topic; do sleep 2; done; done"]
+    entrypoint: ["sh", "-c", "sleep 8; until sh mqadmin updateTopic -n rmqnamesrv:9876 -c DefaultCluster -t TOPIC_MSG_EVENT -a +message.type=MIXED; do sleep 2; done; for topic in TOPIC_SYNC_EVENT TOPIC_PUSH_EVENT TOPIC_SEARCH_INDEX TOPIC_RISK_AUDIT TOPIC_MEDIA_CLEANUP TOPIC_PRODUCER_WARMUP; do until sh mqadmin updateTopic -n rmqnamesrv:9876 -c DefaultCluster -t $$topic; do sleep 2; done; done"]
 
   proxy:
     image: apache/rocketmq:5.3.2

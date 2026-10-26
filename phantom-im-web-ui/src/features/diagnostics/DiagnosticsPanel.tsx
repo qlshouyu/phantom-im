@@ -3,11 +3,11 @@ import { useAppStore } from "../../store/app-store";
 
 export function DiagnisticsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const account = useAppStore((state) => state.account);
-  const connection = useAppStore((state) => state.connection);
+  const connection = useAppStore((state) => state.connection.status);
+  const kickedReason = useAppStore((state) => state.connection.kickedReason);
   const activeConvId = useAppStore((state) => state.activeConvId);
   const messagesByConv = useAppStore((state) => state.messagesByConv);
   const diagnostics = useAppStore((state) => state.diagnostics);
-  const kickedReason = useAppStore((state) => state.kickedReason);
   if (!open) return null;
   const latest = activeConvId ? (messagesByConv[activeConvId] ?? []).at(-1) : undefined;
 

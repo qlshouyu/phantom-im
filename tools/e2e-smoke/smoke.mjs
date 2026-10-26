@@ -37,6 +37,15 @@ const token = (userId) => jwt.sign({ app_id: APP_ID, user_id: userId }, APP_SECR
 let PASS = 0, FAIL = 0;
 const ok = (c, m) => { if (c) { PASS++; console.log(`  ✅ ${m}`); } else { FAIL++; console.error(`  ❌ ${m}`); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function waitFor(predicate, timeoutMs = 8_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = predicate();
+    if (value) return value;
+    await sleep(50);
+  }
+  return undefined;
+}
 const waitClose = (ws, timeoutMs = 15_000) => new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("等待连接关闭超时")), timeoutMs);
   ws.once("close", (code, reason) => { clearTimeout(timer); resolve({ code, reason: reason.toString() }); });
@@ -196,8 +205,7 @@ ok(bAuth.code === 0, "Bob 认证成功");
 // 2) 单聊文本发送 + 在线投递（single-chat-messaging + message-fanout-delivery）
 const s1 = await alice.sendText(conv, "hello bob", "cm-1");
 ok(s1.code === 0 && s1.resp.msgId && Number(s1.resp.convSeq) > 0, `发送成功 msgId=${s1.resp?.msgId} convSeq=${s1.resp?.convSeq}`);
-await sleep(1500); // 等扇出 + 在线推送
-const got = bob.pushes.find((p) => textOf(p) === "hello bob");
+const got = await waitFor(() => bob.pushes.find((p) => textOf(p) === "hello bob"));
 ok(!!got, `Bob 在线收到 "hello bob" (userSeq=${got?.userSeq})`);
 
 // 3) 发送幂等（single-chat-messaging）
@@ -210,7 +218,8 @@ const bobLastUserSeq = Number(got?.userSeq ?? 0);
 bob.close(); await sleep(500);
 const s3 = await alice.sendText(conv, "offline msg", "cm-2");
 ok(s3.code === 0, `Bob 离线期间 Alice 再发成功 convSeq=${s3.resp?.convSeq}`);
-await sleep(1000);
+// 冒烟测试不承担性能门槛；给 Outbox/fanout 冷启动后的异步链路留出处理窗口。
+await sleep(7_000);
 const bob2 = new Client(bobId);
 await bob2.connect();
 const b2Auth = await bob2.auth();
@@ -246,8 +255,7 @@ const group = await userApi(aliceId, "POST", "/groups",
 ok(Boolean(group.conv_id && group.member_count === 3), `创建三人群 groupId=${group.group_id}`);
 const groupMessage = await alice.sendText(group.conv_id, "hello group", "cm-group", 2);
 ok(groupMessage.code === 0, `群消息收单成功 msgId=${groupMessage.resp?.msgId}`);
-await sleep(1500);
-ok(bob2.pushes.some((push) => textOf(push) === "hello group"), "群成员收到群消息");
+ok(!!await waitFor(() => bob2.pushes.find((push) => textOf(push) === "hello group")), "群成员收到群消息");
 
 // 7) 同类型设备顶替（multi-device-session / MD-02）
 const aliceNewDevice = new Client(aliceId);

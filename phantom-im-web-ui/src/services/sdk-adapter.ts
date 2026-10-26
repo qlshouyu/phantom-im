@@ -2,25 +2,47 @@ import {
   PhantomClient, type ChatMessage, type DeviceType,
 } from "@phantom/sdk-web";
 import { phantomToken } from "./api";
-import { useAppStore } from "../store/app-store";
-import type { Account, Conversation } from "../types";
+import { useAppStore, type ConnectionStatus } from "../store/app-store";
+import type { Account, Conversation, PhantomToken } from "../types";
 
 let client: PhantomClient | null = null;
 let currentAccount: Account | null = null;
 let suppressExpiredRefresh = false;
+let detachClientEvents: (() => void) | null = null;
+let clientGeneration = 0;
+let refreshInFlight: Promise<void> | null = null;
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function connection(state: string) {
-  useAppStore.getState().setConnection(state);
+function connection(status: ConnectionStatus, kickedReason?: string) {
+  useAppStore.getState().setConnection(status, kickedReason);
 }
 
 function diagnostic(type: string, detail: unknown) {
   useAppStore.getState().addDiagnostic(type, detail);
 }
 
-function installEvents(target: PhantomClient) {
-  target.on("statechange", connection);
-  target.on("message", (message) => {
+function clearTypingTimers(): void {
+  for (const timer of typingTimers.values()) clearTimeout(timer);
+  typingTimers.clear();
+}
+
+function detachAndLogoutCurrentClient(): void {
+  detachClientEvents?.();
+  detachClientEvents = null;
+  const previous = client;
+  client = null;
+  previous?.logout();
+}
+
+function installEvents(target: PhantomClient): () => void {
+  const isCurrent = () => client === target;
+
+  const onStateChange = (state: string) => {
+    if (!isCurrent()) return;
+    connection(state as ConnectionStatus);
+  };
+  const onMessage = (message: ChatMessage) => {
+    if (!isCurrent()) return;
     useAppStore.getState().upsertMessage(message);
     diagnostic("message", {
       msg_id: message.msgId,
@@ -30,8 +52,9 @@ function installEvents(target: PhantomClient) {
       state: message.state,
     });
     notifyIncoming(message);
-  });
-  target.on("typing", (event: any) => {
+  };
+  const onTyping = (event: any) => {
+    if (!isCurrent()) return;
     const convId = event?.convId ?? event?.conv_id;
     if (!convId) return;
     const typing = Boolean(event?.typing);
@@ -43,41 +66,81 @@ function installEvents(target: PhantomClient) {
       }, 5_000));
     }
     diagnostic("typing", event);
-  });
-  target.on("presence", (event: any) => {
+  };
+  const onPresence = (event: any) => {
+    if (!isCurrent()) return;
     if (event?.userId) useAppStore.getState().setPresence(event.userId, Boolean(event.online));
     diagnostic("presence", event);
-  });
-  target.on("kicked", (reason) => {
-    useAppStore.getState().setKickedReason(reason || "账号已在其他设备登录");
-    connection("kicked");
+  };
+  const onKicked = (reason: string) => {
+    if (!isCurrent()) return;
+    // 终止当前连接代次，后续旧客户端的迟到事件不能再改写 UI。
+    clientGeneration++;
+    clearTypingTimers();
+    detachClientEvents?.();
+    detachClientEvents = null;
+    connection("kicked", reason || "账号已在其他设备登录");
     diagnostic("kicked", { reason });
-  });
-  target.on("tokenExpired", () => {
+  };
+  const onTokenExpired = () => {
+    if (!isCurrent()) return;
     diagnostic("token-expired", "SDK 报告 UserToken 已过期");
     if (suppressExpiredRefresh) return;
     void refreshTokenAndLogin();
-  });
-  target.on("sync", (event) => {
+  };
+  const onSync = (event: any) => {
+    if (!isCurrent()) return;
     diagnostic("sync", event);
     if (event?.type === "FULL_RESYNC_REQUIRED") void loadConversations();
-  });
-  for (const event of ["relation", "conversation", "group", "profile"] as const) {
-    target.on(event, (payload: any) => {
-      diagnostic(event, payload);
-      if (event === "relation") window.dispatchEvent(new Event("phantom:relation"));
-      if (event === "group") window.dispatchEvent(new Event("phantom:group"));
-      if (event === "relation" || event === "group"
-          || payload?.type === "FULL_RESYNC_REQUIRED") void loadConversations();
-    });
-  }
-  target.on("notificationClick", (data) => {
+  };
+  const onRelationEvent = (event: "relation" | "conversation" | "group" | "profile", payload: any) => {
+    if (!isCurrent()) return;
+    diagnostic(event, payload);
+    if (event === "relation") window.dispatchEvent(new Event("phantom:relation"));
+    if (event === "group") window.dispatchEvent(new Event("phantom:group"));
+    if (event === "relation" || event === "group"
+        || payload?.type === "FULL_RESYNC_REQUIRED") void loadConversations();
+  };
+  const onRelation = (payload: any) => onRelationEvent("relation", payload);
+  const onConversation = (payload: any) => onRelationEvent("conversation", payload);
+  const onGroup = (payload: any) => onRelationEvent("group", payload);
+  const onProfile = (payload: any) => onRelationEvent("profile", payload);
+  const onNotificationClick = (data: Record<string, string>) => {
+    if (!isCurrent()) return;
     const convId = data.conv_id ?? data.convId;
     if (convId) {
       useAppStore.getState().setNav("chat");
       void openConversation(convId);
     }
-  });
+  };
+
+  target.on("statechange", onStateChange);
+  target.on("message", onMessage);
+  target.on("typing", onTyping);
+  target.on("presence", onPresence);
+  target.on("kicked", onKicked);
+  target.on("tokenExpired", onTokenExpired);
+  target.on("sync", onSync);
+  target.on("relation", onRelation);
+  target.on("conversation", onConversation);
+  target.on("group", onGroup);
+  target.on("profile", onProfile);
+  target.on("notificationClick", onNotificationClick);
+
+  return () => {
+    target.off("statechange", onStateChange);
+    target.off("message", onMessage);
+    target.off("typing", onTyping);
+    target.off("presence", onPresence);
+    target.off("kicked", onKicked);
+    target.off("tokenExpired", onTokenExpired);
+    target.off("sync", onSync);
+    target.off("relation", onRelation);
+    target.off("conversation", onConversation);
+    target.off("group", onGroup);
+    target.off("profile", onProfile);
+    target.off("notificationClick", onNotificationClick);
+  };
 }
 
 function notifyIncoming(message: ChatMessage) {
@@ -95,20 +158,29 @@ function notifyIncoming(message: ChatMessage) {
   };
 }
 
-export async function connect(account: Account, options: { expired?: boolean } = {}): Promise<void> {
+function beginClientAttempt(): number {
+  const generation = ++clientGeneration;
+  clearTypingTimers();
+  detachAndLogoutCurrentClient();
+  return generation;
+}
+
+async function establishClient(
+  account: Account,
+  token: PhantomToken,
+  generation: number,
+): Promise<void> {
   const runtime = useAppStore.getState().runtime;
   if (!runtime) throw new Error("运行配置尚未加载");
-  disconnect(false);
-  currentAccount = account;
-  const token = await phantomToken(Boolean(options.expired));
+  if (generation !== clientGeneration) return;
+
   const next = new PhantomClient({
     url: runtime.ws_url,
     appId: runtime.app_id,
     httpBaseUrl: `${location.origin}${runtime.proxy_base_url}`,
   });
   client = next;
-  installEvents(next);
-  suppressExpiredRefresh = Boolean(options.expired);
+  detachClientEvents = installEvents(next);
   try {
     await next.login({
       userToken: token.user_token,
@@ -116,9 +188,45 @@ export async function connect(account: Account, options: { expired?: boolean } =
       deviceId: `web-${account.account_id}-${crypto.randomUUID()}`,
       deviceType: "WEB" as DeviceType,
     });
+  } catch (error) {
+    if (generation === clientGeneration && client === next) {
+      detachClientEvents?.();
+      detachClientEvents = null;
+      client = null;
+      next.logout();
+      connection("auth-failed");
+    }
+    throw error;
+  }
+
+  // 登录期间可能已被踢下线，或已有更新的一代连接接管。
+  if (generation !== clientGeneration || client !== next) return;
+  await loadConversations();
+}
+
+export async function connect(account: Account, options: { expired?: boolean } = {}): Promise<void> {
+  const runtime = useAppStore.getState().runtime;
+  if (!runtime) throw new Error("运行配置尚未加载");
+
+  const generation = beginClientAttempt();
+  currentAccount = account;
+  suppressExpiredRefresh = Boolean(options.expired);
+  connection("connecting");
+  try {
+    const token = await phantomToken(Boolean(options.expired));
+    if (generation !== clientGeneration) return;
+    await establishClient(account, token, generation);
+  } catch (error) {
+    if (generation === clientGeneration
+        && useAppStore.getState().connection.status !== "auth-failed") {
+      diagnostic("connect-failed", String(error));
+      connection("auth-failed");
+    }
+    throw error;
   } finally {
     if (options.expired) {
       setTimeout(() => {
+        if (generation !== clientGeneration) return;
         suppressExpiredRefresh = false;
         void refreshTokenAndLogin();
       }, 800);
@@ -126,45 +234,41 @@ export async function connect(account: Account, options: { expired?: boolean } =
       suppressExpiredRefresh = false;
     }
   }
-  await loadConversations();
 }
 
-export async function refreshTokenAndLogin(): Promise<void> {
+async function doRefreshTokenAndLogin(): Promise<void> {
   if (!currentAccount) return;
+  if (useAppStore.getState().connection.status === "kicked") return;
   const account = currentAccount;
-  const runtime = useAppStore.getState().runtime;
-  if (!runtime) return;
+  const generation = beginClientAttempt();
+  connection("reconnecting");
   try {
     const token = await phantomToken(false);
-    const previous = client;
-    client = null;
-    previous?.logout();
-    const next = new PhantomClient({
-      url: runtime.ws_url,
-      appId: runtime.app_id,
-      httpBaseUrl: `${location.origin}${runtime.proxy_base_url}`,
-    });
-    client = next;
-    installEvents(next);
-    await next.login({
-      userToken: token.user_token,
-      userId: token.phantom_user_id,
-      deviceId: `web-${account.account_id}-${crypto.randomUUID()}`,
-      deviceType: "WEB" as DeviceType,
-    });
-    await loadConversations();
-    diagnostic("token-refreshed", "使用新的 Phantom UserToken 恢复连接");
+    if (generation !== clientGeneration) return;
+    await establishClient(account, token, generation);
+    if (generation === clientGeneration) {
+      diagnostic("token-refreshed", "使用新的 Phantom UserToken 恢复连接");
+    }
   } catch (error) {
+    if (generation !== clientGeneration) return;
     diagnostic("token-refresh-failed", String(error));
     connection("auth-failed");
   }
 }
 
+export function refreshTokenAndLogin(): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefreshTokenAndLogin().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 export function disconnect(emitState = true): void {
-  for (const timer of typingTimers.values()) clearTimeout(timer);
-  typingTimers.clear();
-  client?.logout();
-  client = null;
+  clientGeneration++;
+  clearTypingTimers();
+  // 先解绑再 logout，确保旧客户端的 statechange("closed") 不会命中全局状态。
+  detachAndLogoutCurrentClient();
   currentAccount = null;
   if (emitState) connection("closed");
 }
@@ -260,21 +364,27 @@ export async function sendFile(convId: string, file: File,
   });
 }
 
+export async function loadMediaThumbnail(mediaId: string): Promise<Blob> {
+  return getClient().getMediaContent(mediaId, "thumb");
+}
+
 export async function triggerExpiredToken(): Promise<void> {
   if (!client || !currentAccount) return;
   const runtime = useAppStore.getState().runtime;
   if (!runtime) return;
-  suppressExpiredRefresh = true;
   const account = currentAccount;
-  const token = await phantomToken(true);
-  const probe = new PhantomClient({
-    url: runtime.ws_url,
-    appId: runtime.app_id,
-    httpBaseUrl: `${location.origin}${runtime.proxy_base_url}`,
-  });
-  probe.on("statechange", (state: string) => diagnostic("expired-probe-state", state));
-  probe.on("tokenExpired", () => diagnostic("token-expired", "测试探针收到 Token 过期回调"));
+  const generation = clientGeneration;
+  let probe: PhantomClient | null = null;
+  suppressExpiredRefresh = true;
   try {
+    const token = await phantomToken(true);
+    probe = new PhantomClient({
+      url: runtime.ws_url,
+      appId: runtime.app_id,
+      httpBaseUrl: `${location.origin}${runtime.proxy_base_url}`,
+    });
+    probe.on("statechange", (state: string) => diagnostic("expired-probe-state", state));
+    probe.on("tokenExpired", () => diagnostic("token-expired", "测试探针收到 Token 过期回调"));
     await probe.login({
       userToken: token.user_token,
       userId: token.phantom_user_id,
@@ -284,18 +394,19 @@ export async function triggerExpiredToken(): Promise<void> {
   } catch {
     // 该失败是诊断场景的预期结果；随后用新 Token 替换连接。
   } finally {
-    probe.logout();
+    probe?.logout();
     setTimeout(() => {
       suppressExpiredRefresh = false;
+      if (generation !== clientGeneration) return;
       void refreshTokenAndLogin();
     }, 800);
   }
 }
 
 export async function remoteDisconnectAndReconnect(): Promise<void> {
-  if (!client || !currentAccount) return;
-  client.logout();
-  connection("closed");
+  if (!currentAccount) return;
   const account = currentAccount;
+  disconnect(false);
+  connection("closed");
   setTimeout(() => { void connect(account); }, 300);
 }

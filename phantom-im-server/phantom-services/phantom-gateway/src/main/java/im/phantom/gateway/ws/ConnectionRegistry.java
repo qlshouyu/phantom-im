@@ -1,9 +1,12 @@
 package im.phantom.gateway.ws;
 
+import im.phantom.gateway.GatewayProperties;
+import im.phantom.infra.observability.PlatformMetrics;
 import im.phantom.proto.v1.Envelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
@@ -21,10 +24,23 @@ public class ConnectionRegistry {
     private static final Logger log = LoggerFactory.getLogger(ConnectionRegistry.class);
 
     private final Map<String, ConcurrentWebSocketSessionDecorator> byConnId = new ConcurrentHashMap<>();
+    private final PlatformMetrics metrics;
+    private final GatewayProperties properties;
+
+    @Autowired
+    public ConnectionRegistry(PlatformMetrics metrics, GatewayProperties properties) {
+        this.metrics = metrics;
+        this.properties = properties;
+    }
+
+    ConnectionRegistry() {
+        this(null, new GatewayProperties());
+    }
 
     public void register(String connId, WebSocketSession raw) {
         // 并发安全发送包装（推送线程与握手线程可能并发写同一连接）
-        byConnId.put(connId, new ConcurrentWebSocketSessionDecorator(raw, 10_000, 512 * 1024));
+        byConnId.put(connId, new ConcurrentWebSocketSessionDecorator(raw,
+                properties.getWsSendTimeLimitMs(), properties.getWsSendBufferSizeBytes()));
     }
 
     public void remove(String connId) {
@@ -41,6 +57,9 @@ public class ConnectionRegistry {
             s.sendMessage(new BinaryMessage(env.toByteArray()));
             return true;
         } catch (Exception e) {
+            if (metrics != null && isSendTimeout(e)) {
+                metrics.recordWebSocketSendTimeout("UNKNOWN");
+            }
             log.warn("下发失败 connId={}: {}", connId, e.toString());
             return false;
         }
@@ -55,5 +74,10 @@ public class ConnectionRegistry {
                 // 忽略关闭异常
             }
         }
+    }
+
+    private boolean isSendTimeout(Exception error) {
+        String name = error.getClass().getSimpleName();
+        return name.contains("SessionLimitExceeded") || name.contains("Timeout");
     }
 }

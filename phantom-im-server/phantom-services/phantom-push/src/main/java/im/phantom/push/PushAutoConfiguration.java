@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
 import im.phantom.push.provider.LocalPushProvider;
@@ -25,6 +26,12 @@ public class PushAutoConfiguration {
             thread.setDaemon(true);
             return thread;
         });
+    }
+
+    @Bean(destroyMethod = "close")
+    @Qualifier("devicePushExecutor")
+    public ExecutorService devicePushExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean

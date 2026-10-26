@@ -3,6 +3,7 @@ package im.phantom.relation.app;
 import im.phantom.api.config.AppConfigProvider;
 import im.phantom.api.config.AppFeatureConfigDto;
 import im.phantom.api.relation.CreateFriendRequestRequest;
+import im.phantom.api.relation.DirectMessagePolicy;
 import im.phantom.api.relation.FriendRequestAction;
 import im.phantom.api.relation.QrCardDto;
 import im.phantom.api.relation.UpdateFriendRequest;
@@ -174,6 +175,28 @@ class RelationAppServiceTest {
         assertThat(service.listBlacklist("u1")).isEmpty();
         assertThat(repository.isFriend("u1", "u2")).isFalse();
         assertBiz(() -> service.authorizeDirectMessage("app1", "u1", "u2"), ErrorCodes.NOT_FRIEND);
+    }
+
+    @Test
+    void directMessagePolicyUsesMergedRelationStateWithoutChangingErrorPriority() {
+        RelationAppService service = service(true);
+        connect("u1", "u2");
+        assertThat(service.evaluateDirectMessage("app1", "u1", "u2")).isEqualTo(DirectMessagePolicy.ALLOWED);
+
+        repository.deleteFriend("u2", "u1");
+        assertThat(service.evaluateDirectMessage("app1", "u1", "u2"))
+                .isEqualTo(DirectMessagePolicy.RESTRICTED);
+
+        repository.deleteFriend("u1", "u2");
+        assertThat(service.evaluateDirectMessage("app1", "u1", "u2"))
+                .isEqualTo(DirectMessagePolicy.MESSAGE_REQUEST);
+
+        repository.insertBlacklist("u2", "u1", 2L);
+        assertThat(service.evaluateDirectMessage("app1", "u1", "u2"))
+                .isEqualTo(DirectMessagePolicy.RESTRICTED);
+        repository.insertBlacklist("u1", "u2", 3L);
+        assertBiz(() -> service.evaluateDirectMessage("app1", "u1", "u2"),
+                ErrorCodes.IN_MY_BLACKLIST);
     }
 
     @Test

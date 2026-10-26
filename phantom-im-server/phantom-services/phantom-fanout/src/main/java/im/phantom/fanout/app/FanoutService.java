@@ -7,6 +7,7 @@ import im.phantom.common.ConvIds;
 import im.phantom.common.Ids;
 import im.phantom.fanout.infra.UserTimelineWriteDao;
 import im.phantom.infra.redis.SeqAllocator;
+import im.phantom.infra.observability.PlatformMetrics;
 import im.phantom.proto.v1.Msg;
 import im.phantom.proto.v1.MsgPush;
 import im.phantom.proto.v1.NewMessageEvent;
@@ -18,6 +19,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import io.micrometer.core.instrument.Timer;
 
 /**
  * 扇出用例（message-fanout-delivery spec）：为会话内每个接收者分配 user_seq、
@@ -36,22 +38,48 @@ public class FanoutService {
     private final OnlineDeliveryService delivery;
     private final UserSyncEventWriter syncEventWriter;
     private final ObjectProvider<OfflinePushNotifier> offlinePush;
+    private final PlatformMetrics metrics;
+    private final FanoutDeliveryExecutor deliveryExecutor;
 
     public FanoutService(UserTimelineWriteDao dao, SeqAllocator seqAllocator, OnlineDeliveryService delivery) {
-        this(dao, seqAllocator, delivery, null, null);
+        this(dao, seqAllocator, delivery, null, null, null, null);
     }
 
     @Autowired
     public FanoutService(UserTimelineWriteDao dao, SeqAllocator seqAllocator, OnlineDeliveryService delivery,
-                         UserSyncEventWriter syncEventWriter, ObjectProvider<OfflinePushNotifier> offlinePush) {
+                         UserSyncEventWriter syncEventWriter, ObjectProvider<OfflinePushNotifier> offlinePush,
+                         PlatformMetrics metrics, FanoutDeliveryExecutor deliveryExecutor) {
         this.dao = dao;
         this.seqAllocator = seqAllocator;
         this.delivery = delivery;
         this.syncEventWriter = syncEventWriter;
         this.offlinePush = offlinePush;
+        this.metrics = metrics;
+        this.deliveryExecutor = deliveryExecutor;
+    }
+
+    FanoutService(UserTimelineWriteDao dao, SeqAllocator seqAllocator, OnlineDeliveryService delivery,
+                  UserSyncEventWriter syncEventWriter, ObjectProvider<OfflinePushNotifier> offlinePush,
+                  PlatformMetrics metrics) {
+        this(dao, seqAllocator, delivery, syncEventWriter, offlinePush, metrics, null);
     }
 
     public void onNewMessage(Msg msg) {
+        long started = System.nanoTime();
+        try {
+            fanoutMessage(msg);
+            if (metrics != null) {
+                metrics.recordMessageStage("fanout", "success", System.nanoTime() - started);
+            }
+        } catch (RuntimeException error) {
+            if (metrics != null) {
+                metrics.recordMessageStage("fanout", "failure", System.nanoTime() - started);
+            }
+            throw error;
+        }
+    }
+
+    private void fanoutMessage(Msg msg) {
         // 单聊双向：收发双方都写扩散（本人他端一致 MD-12）
         String[] receivers;
         if (msg.getRestricted()) {
@@ -91,14 +119,38 @@ public class FanoutService {
                         .setIsRequest(msg.getIsRequest())
                         .build())
                 .build();
+        Timer.Sample timelineStage = metrics == null ? null : metrics.startMessageStage();
         try {
             dao.insert(receiver, userSeq, EVENT_TYPE_NEW_MESSAGE, msg.getMsgId(),
                     event.toByteArray(), msg.getServerTime());
+            if (timelineStage != null) {
+                metrics.recordMessageStage(timelineStage, "fanout_timeline", "success");
+            }
         } catch (DuplicateKeyException dup) {
+            if (timelineStage != null) {
+                metrics.recordMessageStage(timelineStage, "fanout_timeline", "duplicate");
+            }
             return; // 并发重复消费，幂等丢弃
+        } catch (RuntimeException error) {
+            if (timelineStage != null) {
+                metrics.recordMessageStage(timelineStage, "fanout_timeline", "failure");
+            }
+            throw error;
         }
         // 触发在线投递（无在线连接则留待 SyncReq 补齐）
         MsgPush push = MsgPush.newBuilder().setMsg(msg).setUserSeq(userSeq).build();
+        Runnable task = () -> deliver(receiver, msg, push);
+        if (deliveryExecutor == null) {
+            task.run();
+            return;
+        }
+        if (!deliveryExecutor.submit(receiver, userSeq, task)) {
+            log.warn("fanout 在线投递队列拒绝 receiver={} userSeq={} msgId={} clientMsgId={}，等待 Sync 补齐",
+                    receiver, userSeq, msg.getMsgId(), msg.getClientMsgId());
+        }
+    }
+
+    private void deliver(String receiver, Msg msg, MsgPush push) {
         int n = delivery.deliver(receiver, push);
         if (n == 0 && offlinePush != null) {
             OfflinePushNotifier notifier = offlinePush.getIfAvailable();
@@ -106,6 +158,7 @@ public class FanoutService {
                 notifier.notifyOffline(receiver, msg);
             }
         }
-        log.info("扇出 receiver={} userSeq={} msgId={} 在线下发={}", receiver, userSeq, msg.getMsgId(), n);
+        log.debug("扇出 receiver={} userSeq={} msgId={} clientMsgId={} 在线下发={}",
+                receiver, push.getUserSeq(), msg.getMsgId(), msg.getClientMsgId(), n);
     }
 }

@@ -4,6 +4,7 @@ import im.phantom.infra.mq.MqProperties;
 import im.phantom.infra.mq.TransactionChecker;
 import im.phantom.infra.mq.TxMqProducer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.ComponentScan;
  * 事务生产者在此装配（本 module 持有 TransactionChecker）。
  */
 @AutoConfiguration
+@EnableConfigurationProperties(MessagePublishProperties.class)
 @ComponentScan(basePackageClasses = MessageAutoConfiguration.class)
 public class MessageAutoConfiguration {
 

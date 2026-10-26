@@ -35,12 +35,28 @@ CREATE TABLE IF NOT EXISTS app_config (
   read_receipt_enabled         TINYINT(1)  NOT NULL DEFAULT 1,
   burn_after_read_enabled      TINYINT(1)  NOT NULL DEFAULT 0,
   burn_after_read_ttl_seconds  INT         NOT NULL DEFAULT 0,
+  risk_check_enabled           TINYINT(1)  NOT NULL DEFAULT 0,
   sdk_profile_write_enabled    TINYINT(1)  NOT NULL DEFAULT 1,
   max_devices                  INT         NOT NULL DEFAULT 3,
   updated_at                   BIGINT      NOT NULL,
   PRIMARY KEY (app_id),
   CONSTRAINT fk_app_config_app FOREIGN KEY (app_id) REFERENCES app(app_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用级功能配置';
+
+DROP PROCEDURE IF EXISTS phantom_add_app_config_column_if_missing;
+DELIMITER //
+CREATE PROCEDURE phantom_add_app_config_column_if_missing()
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema=DATABASE() AND table_name='app_config'
+                   AND column_name='risk_check_enabled') THEN
+    ALTER TABLE app_config ADD COLUMN risk_check_enabled TINYINT(1) NOT NULL DEFAULT 0
+      AFTER burn_after_read_ttl_seconds;
+  END IF;
+END//
+DELIMITER ;
+CALL phantom_add_app_config_column_if_missing();
+DROP PROCEDURE phantom_add_app_config_column_if_missing;
 
 CREATE TABLE IF NOT EXISTS app_user (
   user_id           VARCHAR(64)  NOT NULL COMMENT 'Phantom ID，永不复用',

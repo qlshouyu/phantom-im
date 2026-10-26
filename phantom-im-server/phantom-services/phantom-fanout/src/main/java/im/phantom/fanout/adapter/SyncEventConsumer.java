@@ -23,7 +23,7 @@ public class SyncEventConsumer implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         try {
-            mqConsumers.newConsumer(GROUP, Topics.SYNC_EVENT, Topics.TAG_STATE_CHANGED, body -> {
+            mqConsumers.newConsumer(GROUP, Topics.SYNC_EVENT, Topics.TAG_STATE_CHANGED, "fanout", body -> {
                 applier.apply(body);
                 return true;
             });

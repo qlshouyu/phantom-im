@@ -26,6 +26,8 @@ public interface RelationRepository {
 
     boolean isFriend(String userId, String friendId);
 
+    DirectMessageRelationState directMessageRelationState(String senderId, String receiverId);
+
     int countFriends(String userId);
 
     void insertFriend(String userId, String friendId, long createdAt);
@@ -104,6 +106,9 @@ public interface RelationRepository {
     }
 
     record FriendSettingRecord(String remark, boolean pinned) {}
+
+    record DirectMessageRelationState(boolean senderBlacklistedReceiver, boolean receiverBlacklistedSender,
+                                      boolean senderStillHasPeer, boolean peerStillHasSender) {}
 
     record FriendGroupRecord(String groupId, String name, long createdAt, int memberCount) {}
 

@@ -36,18 +36,28 @@ public class MqConsumers implements AutoCloseable {
 
     public synchronized void newConsumer(String group, String topic, String tag,
                                          MqMessageHandler handler) throws ClientException {
+        newConsumer(group, topic, tag, "default", handler);
+    }
+
+    public synchronized void newConsumer(String group, String topic, String tag, String profile,
+                                         MqMessageHandler handler) throws ClientException {
         ClientConfiguration cc = ClientConfiguration.newBuilder()
                 .setEndpoints(props.getEndpoints())
                 .build();
         FilterExpression filter = new FilterExpression(tag, FilterExpressionType.TAG);
+        MqProperties.ConsumerSettings limits = props.consumer(profile);
         PushConsumer consumer = provider.newPushConsumerBuilder()
                 .setClientConfiguration(cc)
                 .setConsumerGroup(group)
                 .setSubscriptionExpressions(Collections.singletonMap(topic, filter))
+                .setConsumptionThreadCount(Math.max(1, limits.getConsumptionThreadCount()))
+                .setMaxCacheMessageCount(Math.max(1, limits.getMaxCacheMessageCount()))
+                .setMaxCacheMessageSizeInBytes(Math.max(1024, limits.getMaxCacheMessageSizeBytes()))
                 .setMessageListener(view -> {
+                    byte[] body = new byte[0];
                     try {
-                        ByteBuffer bb = view.getBody();
-                        byte[] body = new byte[bb.remaining()];
+                        ByteBuffer bb = view.getBody().duplicate();
+                        body = new byte[bb.remaining()];
                         bb.get(body);
                         boolean success = handler.handle(body);
                         if (!success) {
@@ -56,13 +66,17 @@ public class MqConsumers implements AutoCloseable {
                         return success ? ConsumeResult.SUCCESS : ConsumeResult.FAILURE;
                     } catch (Exception e) {
                         metrics.recordConsumerFailure(group, topic);
-                        log.warn("消费失败，稍后重试 group={}: {}", group, e.toString());
+                        log.warn("消费失败，稍后重试 group={} messageTopic={} tag={} keys={} bodyLength={}: {}",
+                                group, view.getTopic(), view.getTag().orElse(""), view.getKeys(), body.length,
+                                e.toString());
                         return ConsumeResult.FAILURE;
                     }
                 })
                 .build();
         started.add(consumer);
-        log.info("MQ 消费者启动 group={} topic={} tag={}", group, topic, tag);
+        log.info("MQ 消费者启动 group={} topic={} tag={} profile={} threads={} cacheCount={} cacheBytes={}",
+                group, topic, tag, profile, limits.getConsumptionThreadCount(),
+                limits.getMaxCacheMessageCount(), limits.getMaxCacheMessageSizeBytes());
     }
 
     @Override

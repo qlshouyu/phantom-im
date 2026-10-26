@@ -56,4 +56,10 @@ public interface RelationService {
         authorizeDirectMessage(appId, senderId, receiverId);
         return DirectMessagePolicy.ALLOWED;
     }
+
+    /** 复用调用方已加载的关系链配置快照，避免发送热路径重复查询应用配置。 */
+    default DirectMessagePolicy evaluateDirectMessage(String appId, String senderId, String receiverId,
+                                                       boolean relationHosted) {
+        return evaluateDirectMessage(appId, senderId, receiverId);
+    }
 }

@@ -13,10 +13,12 @@ import im.phantom.gateway.ws.CommandDispatcher;
 import im.phantom.gateway.ws.ConnectionRegistry;
 import im.phantom.gateway.ws.PhantomWsHandler;
 import im.phantom.gateway.ws.PresenceRegistry;
+import im.phantom.gateway.ws.SendCommandExecutor;
 import im.phantom.gateway.device.DeviceRegistryService;
 import im.phantom.gateway.http.GatewayRateLimitFilter;
 import im.phantom.infra.redis.AckCursorStore;
 import im.phantom.infra.redis.RedisRateLimiter;
+import im.phantom.infra.observability.PlatformMetrics;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -44,6 +46,11 @@ public class GatewayAutoConfiguration {
         });
     }
 
+    @Bean(destroyMethod = "shutdown")
+    public SendCommandExecutor sendCommandExecutor(GatewayProperties properties, PlatformMetrics metrics) {
+        return new SendCommandExecutor(properties, metrics);
+    }
+
     @Bean
     public PhantomWsHandler phantomWsHandler(AuthService authService, RouteTableService routeTable,
                                              UserSeqQuery userSeqQuery, ConnectionRegistry registry,
@@ -55,10 +62,11 @@ public class GatewayAutoConfiguration {
                                              PresenceRegistry presenceRegistry,
                                              ObjectProvider<AppConfigProvider> appConfigs,
                                              DeviceRegistryService deviceRegistry,
-                                             RedisRateLimiter rateLimiter) {
+                                             RedisRateLimiter rateLimiter,
+                                             SendCommandExecutor sendExecutor) {
         return new PhantomWsHandler(authService, routeTable, userSeqQuery, registry, dispatcher,
                 ackCursor, props, gatewayScheduler, authResponseFactory, ackHandlers, presenceRegistry,
-                appConfigs, deviceRegistry, rateLimiter);
+                appConfigs, deviceRegistry, rateLimiter, sendExecutor);
     }
 
     @Bean

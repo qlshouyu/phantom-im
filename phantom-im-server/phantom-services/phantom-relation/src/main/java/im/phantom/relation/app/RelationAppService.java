@@ -402,20 +402,28 @@ public class RelationAppService implements RelationService {
 
     @Override
     public DirectMessagePolicy evaluateDirectMessage(String appId, String senderId, String receiverId) {
+        return evaluateDirectMessage(appId, senderId, receiverId, relationHosted(appId));
+    }
+
+    @Override
+    public DirectMessagePolicy evaluateDirectMessage(String appId, String senderId, String receiverId,
+                                                      boolean relationHosted) {
         if (senderId == null || receiverId == null || senderId.equals(receiverId)) {
             throw new BizException(ErrorCodes.CONV_INVALID, "单聊成员非法");
         }
-        if (repository.isBlacklisted(senderId, receiverId)) {
+        RelationRepository.DirectMessageRelationState state =
+                repository.directMessageRelationState(senderId, receiverId);
+        if (state.senderBlacklistedReceiver()) {
             throw new BizException(ErrorCodes.IN_MY_BLACKLIST, "你已将对方拉黑");
         }
-        if (repository.isBlacklisted(receiverId, senderId)) {
+        if (state.receiverBlacklistedSender()) {
             return DirectMessagePolicy.RESTRICTED;
         }
-        if (!relationHosted(appId)) {
+        if (!relationHosted) {
             return DirectMessagePolicy.ALLOWED;
         }
-        boolean senderStillHasPeer = repository.isFriend(senderId, receiverId);
-        boolean peerStillHasSender = repository.isFriend(receiverId, senderId);
+        boolean senderStillHasPeer = state.senderStillHasPeer();
+        boolean peerStillHasSender = state.peerStillHasSender();
         if (!senderStillHasPeer) {
             // 两个人互删或从未成为好友时进入消息请求；只有发送方单方面删除时拒绝。
             return peerStillHasSender ? throwNotFriend() : DirectMessagePolicy.MESSAGE_REQUEST;

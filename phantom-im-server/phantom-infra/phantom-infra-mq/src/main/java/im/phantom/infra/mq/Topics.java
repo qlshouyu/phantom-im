@@ -22,6 +22,9 @@ public final class Topics {
     /** 媒体清理事件。 */
     public static final String MEDIA_CLEANUP_EVENT = "TOPIC_MEDIA_CLEANUP";
 
+    /** 仅用于普通消息生产者启动预热，无消费者订阅。 */
+    public static final String PRODUCER_WARMUP = "TOPIC_PRODUCER_WARMUP";
+
     public static final String TAG_NEW_MSG = "new_msg";
     public static final String TAG_RECALL = "recall";
     public static final String TAG_STATE_CHANGED = "state_changed";
@@ -29,4 +32,6 @@ public final class Topics {
     public static final String TAG_INDEX = "index";
     public static final String TAG_AUDIT = "audit";
     public static final String TAG_CLEANUP = "cleanup";
+    /** 仅供生产者启动预热，消费者不订阅。 */
+    public static final String TAG_WARMUP = "warmup";
 }

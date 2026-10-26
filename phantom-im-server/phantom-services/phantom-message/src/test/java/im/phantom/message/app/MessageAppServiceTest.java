@@ -1,14 +1,20 @@
 package im.phantom.message.app;
 
 import im.phantom.api.relation.RelationService;
+import im.phantom.api.relation.DirectMessagePolicy;
+import im.phantom.api.config.AppConfigProvider;
+import im.phantom.api.config.AppFeatureConfigDto;
 import im.phantom.common.BizException;
 import im.phantom.common.ConvIds;
 import im.phantom.common.ErrorCodes;
 import im.phantom.common.risk.ContentModerationProvider;
 import im.phantom.common.risk.ModerationDecision;
 import im.phantom.common.risk.ModerationRequest;
+import im.phantom.common.risk.UserSafetyChecker;
 import im.phantom.infra.mq.TxMqProducer;
+import im.phantom.infra.observability.PlatformMetrics;
 import im.phantom.infra.redis.SeqAllocator;
+import im.phantom.message.MessagePublishProperties;
 import im.phantom.message.infra.ConvTimelineDao;
 import im.phantom.proto.v1.ConvType;
 import im.phantom.proto.v1.MsgContent;
@@ -24,6 +30,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +45,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,6 +67,8 @@ class MessageAppServiceTest {
     private RelationService relationService;
     @Mock
     private ObjectProvider<ContentModerationProvider> moderationProviders;
+    @Mock
+    private ObjectProvider<AppConfigProvider> configProviders;
 
     private MessageAppService service;
 
@@ -112,6 +122,24 @@ class MessageAppServiceTest {
     }
 
     @Test
+    void recordsCorrelatedSendStages() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        when(dao.findByClientMsgId(SENDER, "c-metrics")).thenReturn(null);
+        when(seqAllocator.nextConvSeq(CONV)).thenReturn(12L);
+        when(producer.sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                .thenReturn(true);
+        MessageAppService instrumented = new MessageAppService(dao, seqAllocator, producer,
+                null, null, null, null, null, null, new PlatformMetrics(registry));
+
+        instrumented.handleSend(SENDER, request("c-metrics", "hello"));
+
+        assertThat(registry.get(PlatformMetrics.MESSAGE_STAGE_DURATION)
+                .tag("stage", "send_total").tag("result", "success").timer().count()).isEqualTo(1);
+        assertThat(registry.get(PlatformMetrics.MESSAGE_STAGE_DURATION)
+                .tag("stage", "local_tx").timer().count()).isEqualTo(1);
+    }
+
+    @Test
     void failedLocalTransactionIsNotReportedAsSuccess() throws Exception {
         when(dao.findByClientMsgId(SENDER, "c-3")).thenReturn(null);
         when(seqAllocator.nextConvSeq(CONV)).thenReturn(10L);
@@ -129,7 +157,7 @@ class MessageAppServiceTest {
     void blacklistPolicyRejectsMessageBeforeAllocatingSequence() throws Exception {
         when(relationServices.getIfAvailable()).thenReturn(relationService);
         doThrow(new BizException(ErrorCodes.REJECTED_BY_PEER, "对方拒绝接收消息"))
-                .when(relationService).authorizeDirectMessage("app1", SENDER, "u_bob");
+                .when(relationService).evaluateDirectMessage("app1", SENDER, "u_bob", true);
         MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer, relationServices,
                 null, null, null, null, null);
 
@@ -138,6 +166,68 @@ class MessageAppServiceTest {
                 .extracting(error -> ((BizException) error).code())
                 .isEqualTo(ErrorCodes.REJECTED_BY_PEER);
         verify(seqAllocator, never()).nextConvSeq(anyString());
+        verify(producer, never()).sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void loadsApplicationConfigOnceAndReusesSnapshotForRiskRelationAndBurnTtl() throws Exception {
+        AppConfigProvider configProvider = org.mockito.Mockito.mock(AppConfigProvider.class);
+        when(configProvider.getConfig("app")).thenReturn(
+                new AppFeatureConfigDto(true, true, true, 30, true, 3, false));
+        when(configProviders.getIfAvailable()).thenReturn(configProvider);
+        when(relationServices.getIfAvailable()).thenReturn(relationService);
+        when(relationService.evaluateDirectMessage("app", SENDER, "u_bob", true))
+                .thenReturn(DirectMessagePolicy.ALLOWED);
+        when(dao.findByClientMsgId(SENDER, "c-config-snapshot")).thenReturn(null);
+        when(seqAllocator.nextConvSeq(CONV)).thenReturn(13L);
+        when(producer.sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                .thenReturn(true);
+        MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer, relationServices,
+                configProviders, null, null, moderationProviders, null);
+
+        guarded.handleSend("app", SENDER, request("c-config-snapshot", "hello"));
+
+        verify(configProvider, times(1)).getConfig("app");
+        ArgumentCaptor<byte[]> body = ArgumentCaptor.forClass(byte[].class);
+        verify(producer).sendInTransaction(anyString(), anyString(), anyString(), anyString(), body.capture(), any());
+        assertThat(Msg.parseFrom(body.getValue()).getBurnAfterReadTtlSeconds()).isEqualTo(30);
+    }
+
+    @Test
+    void disabledRiskCheckSkipsModerationSafetyAndRiskQueries() throws Exception {
+        AppConfigProvider configProvider = org.mockito.Mockito.mock(AppConfigProvider.class);
+        when(configProvider.getConfig("app")).thenReturn(
+                new AppFeatureConfigDto(true, true, false, 0, true, 3, false));
+        when(configProviders.getIfAvailable()).thenReturn(configProvider);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<UserSafetyChecker> safetyProviders = org.mockito.Mockito.mock(ObjectProvider.class);
+        when(dao.findByClientMsgId(SENDER, "c-risk-off")).thenReturn(null);
+        when(seqAllocator.nextConvSeq(CONV)).thenReturn(14L);
+        when(producer.sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                .thenReturn(true);
+        MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer,
+                null, configProviders, null, null, moderationProviders, safetyProviders);
+
+        guarded.handleSend("app", SENDER, request("c-risk-off", "hello"));
+
+        verify(moderationProviders, never()).getIfAvailable();
+        verify(safetyProviders, never()).getIfAvailable();
+    }
+
+    @Test
+    void outboxModeDoesNotWaitForTransactionMqProducer() throws Exception {
+        MessagePublishProperties properties = new MessagePublishProperties();
+        properties.setPublishMode("outbox");
+        MessagePersistenceService persistence = org.mockito.Mockito.mock(MessagePersistenceService.class);
+        when(dao.findByClientMsgId(SENDER, "c-outbox")).thenReturn(null);
+        when(seqAllocator.nextConvSeq(CONV)).thenReturn(15L);
+        MessageAppService outboxService = new MessageAppService(dao, seqAllocator, producer,
+                null, null, null, null, null, null, null, properties, persistence);
+
+        SendMsgResp response = outboxService.handleSend("app", SENDER, request("c-outbox", "hello"));
+
+        assertThat(response.getConvSeq()).isEqualTo(15L);
+        verify(persistence).persistWithOutbox(any(Msg.class));
         verify(producer, never()).sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any());
     }
 
@@ -172,8 +262,12 @@ class MessageAppServiceTest {
             }
         };
         when(moderationProviders.getIfAvailable()).thenReturn(provider);
+        AppConfigProvider configProvider = org.mockito.Mockito.mock(AppConfigProvider.class);
+        when(configProvider.getConfig("app")).thenReturn(
+                new AppFeatureConfigDto(true, true, false, 0, true, 3, true));
+        when(configProviders.getIfAvailable()).thenReturn(configProvider);
         MessageAppService guarded = new MessageAppService(dao, seqAllocator, producer,
-                null, null, null, null, moderationProviders, null);
+                null, configProviders, null, null, moderationProviders, null);
         when(dao.findByClientMsgId(SENDER, "c-review")).thenReturn(null);
         when(seqAllocator.nextConvSeq(CONV)).thenReturn(11L);
         when(producer.sendInTransaction(anyString(), anyString(), anyString(), anyString(), any(), any()))

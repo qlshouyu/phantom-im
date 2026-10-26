@@ -111,6 +111,6 @@ public class ApplicationService {
     }
 
     private AppFeatureConfigDto defaultFeatures() {
-        return new AppFeatureConfigDto(true, true, false, 0, true, 3);
+        return AppFeatureConfigDto.defaults();
     }
 }

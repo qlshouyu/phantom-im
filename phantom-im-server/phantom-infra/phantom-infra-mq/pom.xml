@@ -26,5 +26,9 @@
       <groupId>im.phantom</groupId>
       <artifactId>phantom-infra-observability</artifactId>
     </dependency>
+    <dependency>
+      <groupId>im.phantom</groupId>
+      <artifactId>phantom-proto</artifactId>
+    </dependency>
   </dependencies>
 </project>

@@ -9,6 +9,7 @@ import im.phantom.search.app.SearchDtos.SearchResult;
 import im.phantom.search.app.SearchDtos.SearchSuggestions;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,5 +43,12 @@ public class SearchController {
             @RequestAttribute(HttpAuthAttributes.USER_ID) String userId,
             @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
         return ApiResponse.ok(search.suggest(userId, query, limit), requestId);
+    }
+
+    @PostMapping(ApiRoutes.SEARCH_REBUILD)
+    public ApiResponse<Void> rebuild(@RequestAttribute(HttpAuthAttributes.USER_ID) String userId,
+            @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
+        search.rebuildUser(userId);
+        return ApiResponse.ok(null, requestId);
     }
 }

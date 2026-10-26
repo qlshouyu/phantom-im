@@ -7,7 +7,8 @@
     "security": "node security-smoke.mjs",
     "resilience": "node resilience-smoke.mjs",
     "capacity": "node capacity-smoke.mjs",
-    "release-rehearsal": "node release-rehearsal.mjs"
+    "release-rehearsal": "node release-rehearsal.mjs",
+    "latency-benchmark": "node latency-benchmark.mjs"
   },
   "dependencies": {
     "protobufjs": "^7.4.0",

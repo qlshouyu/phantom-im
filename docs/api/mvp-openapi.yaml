@@ -24,6 +24,7 @@ components:
         read_receipt_enabled: { type: boolean }
         burn_after_read_enabled: { type: boolean }
         burn_after_read_ttl_seconds: { type: integer }
+        risk_check_enabled: { type: boolean, default: false }
     UserProfile:
       type: object
       properties:

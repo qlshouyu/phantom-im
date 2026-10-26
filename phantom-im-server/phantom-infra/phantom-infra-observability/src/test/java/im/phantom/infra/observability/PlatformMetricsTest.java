@@ -21,6 +21,20 @@ class PlatformMetricsTest {
     }
 
     @Test
+    void recordsMessageStageAndSkippedStateWithoutMessageContent() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        PlatformMetrics metrics = new PlatformMetrics(registry);
+
+        metrics.recordMessageStage("risk", "success", 2_000_000L);
+        metrics.recordMessageStageSkipped("risk", "disabled");
+
+        assertThat(registry.get(PlatformMetrics.MESSAGE_STAGE_DURATION)
+                .tag("stage", "risk").tag("result", "success").timer().count()).isEqualTo(1);
+        assertThat(registry.get(PlatformMetrics.MESSAGE_STAGE_SKIPPED)
+                .tag("stage", "risk").tag("reason", "disabled").counter().count()).isEqualTo(1);
+    }
+
+    @Test
     void traceContextPopulatesMdc() {
         try {
             assertThat(TraceContext.start("req_1", "trace_1")).isEqualTo("req_1");

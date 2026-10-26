@@ -35,7 +35,7 @@ public class ConversationMsgConsumer implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         try {
-            mqConsumers.newConsumer(GROUP, Topics.MSG_EVENT, Topics.TAG_NEW_MSG, body -> {
+            mqConsumers.newConsumer(GROUP, Topics.MSG_EVENT, Topics.TAG_NEW_MSG, "conversation", body -> {
                 Msg msg = Msg.parseFrom(body);
                 try {
                     idempotent.handleOnce(GROUP, msg.getMsgId(), () -> conversationService.onNewMessage(msg));

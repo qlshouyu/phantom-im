@@ -14,9 +14,10 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
 describe("app store", () => {
   beforeEach(() => {
     useAppStore.setState({
-      account: null, runtime: null, nav: "chat", connection: "idle", activeConvId: null,
+      account: null, runtime: null, nav: "chat",
+      connection: { status: "idle", kickedReason: null }, activeConvId: null,
       conversations: [], messagesByConv: {}, typingByConv: {}, presenceByUser: {},
-      drafts: {}, diagnostics: [], search: null, kickedReason: null, highlightConvSeq: null,
+      drafts: {}, diagnostics: [], search: null, highlightConvSeq: null,
     });
   });
 
@@ -51,5 +52,47 @@ describe("app store", () => {
 
     expect(useAppStore.getState().messagesByConv.single_a_b
       .map((item) => item.clientMsgId)).toEqual(["c1", "c2"]);
+  });
+
+  it("退出会话时保留已加载的运行时配置", () => {
+    const runtime = {
+      app_id: "app-1",
+      ws_url: "ws://localhost:28080/ws",
+      proxy_base_url: "/api",
+      test_mode: false,
+    };
+    useAppStore.setState({
+      account: {
+        account_id: "a1", phantom_user_id: "u1", login_name: "alice", nickname: "Alice",
+      },
+      runtime,
+      connection: { status: "online", kickedReason: null },
+      activeConvId: "single_alice_bob",
+    });
+
+    useAppStore.getState().resetSession();
+
+    const state = useAppStore.getState();
+    expect(state.runtime).toBe(runtime);
+    expect(state.account).toBeNull();
+    expect(state.connection).toEqual({ status: "idle", kickedReason: null });
+    expect(state.activeConvId).toBeNull();
+  });
+
+  it("连接状态原子转换并清除旧踢下线原因", () => {
+    const store = useAppStore.getState();
+    store.setConnection("kicked", "KICK_REASON_SAME_TYPE_LOGIN");
+
+    expect(useAppStore.getState().connection).toEqual({
+      status: "kicked",
+      kickedReason: "KICK_REASON_SAME_TYPE_LOGIN",
+    });
+
+    store.setConnection("online");
+
+    expect(useAppStore.getState().connection).toEqual({
+      status: "online",
+      kickedReason: null,
+    });
   });
 });

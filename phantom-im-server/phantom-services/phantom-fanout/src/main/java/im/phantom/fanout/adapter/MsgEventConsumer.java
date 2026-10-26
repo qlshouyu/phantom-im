@@ -26,7 +26,7 @@ public class MsgEventConsumer implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         try {
-            mqConsumers.newConsumer(GROUP, Topics.MSG_EVENT, Topics.TAG_NEW_MSG, body -> {
+            mqConsumers.newConsumer(GROUP, Topics.MSG_EVENT, Topics.TAG_NEW_MSG, "fanout", body -> {
                 Msg msg = Msg.parseFrom(body);
                 fanoutService.onNewMessage(msg);
                 return true;

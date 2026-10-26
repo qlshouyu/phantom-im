@@ -60,7 +60,7 @@ docker compose down -v
 - 单独启动/重启：`docker compose up -d dashboard` / `docker compose restart dashboard`。
 - 首次拉取 `apacherocketmq/rocketmq-dashboard:latest` 镜像较慢，属正常。
 
-> 本项目相关：可在此确认 `TOPIC_MSG_EVENT`（TRANSACTION 类型）与消费组 `phantom-fanout` 的消费进度，排查扇出堆积。
+> 本项目相关：可在此确认 `TOPIC_MSG_EVENT`（MIXED 类型，兼容事务与普通 Outbox 消息）与消费组 `phantom-fanout` 的消费进度，排查扇出堆积。
 
 ## 关于 `brokerIP1`（重要）
 
@@ -86,11 +86,11 @@ brokerIP1 = 192.168.1.100   # 宿主机真实 IP；此模式下 proxy 与 broker
 
 ## 常见问题
 
-- **生产者报 `No route info of this topic` / `No topic route info in name server for the topic: TOPIC_MSG_EVENT`**：5.x gRPC 客户端经 proxy 取路由，**不会**触发 `autoCreateTopicEnable` 自动建 Topic；且事务消息要求 Topic 声明 `message.type=TRANSACTION`。首次部署（或清空 `broker-store` 卷后）需手动创建：
+- **生产者报 `No route info of this topic` / `No topic route info in name server for the topic: TOPIC_MSG_EVENT`**：5.x gRPC 客户端经 proxy 取路由，**不会**触发 `autoCreateTopicEnable` 自动建 Topic。`TOPIC_MSG_EVENT` 同时承载事务消息和普通 Outbox 消息，因此 Broker 必须开启 `enableMixedMessageType=true`，Topic 声明 `message.type=MIXED`。首次部署（或清空 `broker-store` 卷后）需手动创建：
 
   ```bash
   docker exec -e JAVA_OPT_EXT=-Xmx128m rmqbroker sh mqadmin updateTopic -n rmqnamesrv:9876 -c DefaultCluster \
-    -t TOPIC_MSG_EVENT -r 8 -w 8 -a +message.type=TRANSACTION
+    -t TOPIC_MSG_EVENT -r 8 -w 8 -a +message.type=MIXED
   docker exec -e JAVA_OPT_EXT=-Xmx128m rmqbroker sh mqadmin updateSubGroup -n rmqnamesrv:9876 -c DefaultCluster -g phantom-fanout
   ```
 - **客户端连接超时**：多为 `brokerIP1` 配置为容器内地址或不可达 IP 所致，参见上文跨机部署。

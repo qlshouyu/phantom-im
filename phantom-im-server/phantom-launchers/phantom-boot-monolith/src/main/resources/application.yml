@@ -10,6 +10,12 @@ spring:
     username: root
     password: "123456"
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${PHANTOM_DB_MAX_POOL_SIZE:20}
+      minimum-idle: ${PHANTOM_DB_MIN_IDLE:5}
+      connection-timeout: ${PHANTOM_DB_CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: ${PHANTOM_DB_VALIDATION_TIMEOUT_MS:3000}
+      register-mbeans: true
   data:
     redis:
       host: 127.0.0.1
@@ -22,12 +28,52 @@ phantom:
     id: gw-1
     heartbeat-interval-s: 270
     auth-timeout-s: 10
+    send-worker-threads: ${PHANTOM_GATEWAY_SEND_WORKER_THREADS:4}
+    send-queue-capacity: ${PHANTOM_GATEWAY_SEND_QUEUE_CAPACITY:2000}
+    send-per-connection-capacity: ${PHANTOM_GATEWAY_SEND_PER_CONNECTION_CAPACITY:8}
+    send-task-timeout-ms: ${PHANTOM_GATEWAY_SEND_TASK_TIMEOUT_MS:5000}
+    send-shutdown-timeout-ms: ${PHANTOM_GATEWAY_SEND_SHUTDOWN_TIMEOUT_MS:10000}
+    ws-send-time-limit-ms: ${PHANTOM_GATEWAY_WS_SEND_TIME_LIMIT_MS:2000}
+    ws-send-buffer-size-bytes: ${PHANTOM_GATEWAY_WS_SEND_BUFFER_SIZE_BYTES:524288}
+    send-rate-limit: ${PHANTOM_GATEWAY_SEND_RATE_LIMIT:2400}
+    send-rate-window-seconds: ${PHANTOM_GATEWAY_SEND_RATE_WINDOW_SECONDS:60}
     app-id: app_demo
     app-secret: phantom_demo_secret_please_change_0123456789
   mq:
     # RocketMQ 5.x gRPC proxy 端点（已发布到宿主 8081；proxy 内部路由 broker）
     endpoints: 127.0.0.1:8081
     producer-group: phantom-tx-producer
+    consumption-thread-count: ${PHANTOM_MQ_CONSUMER_THREADS:20}
+    max-cache-message-count: ${PHANTOM_MQ_MAX_CACHE_MESSAGES:1024}
+    max-cache-message-size-bytes: ${PHANTOM_MQ_MAX_CACHE_MESSAGE_BYTES:67108864}
+    consumers:
+      fanout:
+        consumption-thread-count: ${PHANTOM_MQ_FANOUT_THREADS:8}
+        max-cache-message-count: ${PHANTOM_MQ_FANOUT_CACHE_MESSAGES:512}
+        max-cache-message-size-bytes: ${PHANTOM_MQ_FANOUT_CACHE_BYTES:33554432}
+      conversation:
+        consumption-thread-count: ${PHANTOM_MQ_CONVERSATION_THREADS:6}
+        max-cache-message-count: ${PHANTOM_MQ_CONVERSATION_CACHE_MESSAGES:512}
+        max-cache-message-size-bytes: ${PHANTOM_MQ_CONVERSATION_CACHE_BYTES:33554432}
+      search:
+        consumption-thread-count: ${PHANTOM_MQ_SEARCH_THREADS:4}
+        max-cache-message-count: ${PHANTOM_MQ_SEARCH_CACHE_MESSAGES:256}
+        max-cache-message-size-bytes: ${PHANTOM_MQ_SEARCH_CACHE_BYTES:16777216}
+  message:
+    # transaction-mq 仅用于灰度回滚；本地默认验证新的本地事务 Outbox 链路。
+    publish-mode: ${PHANTOM_MESSAGE_PUBLISH_MODE:outbox}
+    outbox-poll-ms: ${PHANTOM_MESSAGE_OUTBOX_POLL_MS:100}
+    outbox-batch-size: ${PHANTOM_MESSAGE_OUTBOX_BATCH_SIZE:100}
+    outbox-retry-base-ms: ${PHANTOM_MESSAGE_OUTBOX_RETRY_BASE_MS:100}
+    outbox-retry-max-ms: ${PHANTOM_MESSAGE_OUTBOX_RETRY_MAX_MS:30000}
+  fanout:
+    delivery:
+      worker-threads: ${PHANTOM_FANOUT_DELIVERY_WORKER_THREADS:8}
+      queue-capacity: ${PHANTOM_FANOUT_DELIVERY_QUEUE_CAPACITY:5000}
+      per-user-capacity: ${PHANTOM_FANOUT_DELIVERY_PER_USER_CAPACITY:50}
+      shutdown-timeout-ms: ${PHANTOM_FANOUT_DELIVERY_SHUTDOWN_TIMEOUT_MS:10000}
+  app-config:
+    cache-ttl-ms: ${PHANTOM_APP_CONFIG_CACHE_TTL_MS:2000}
   openapi:
     security:
       # 本地单体使用 demo 应用作为 OpenAPI bootstrap；生产由配置中心覆盖。
@@ -55,10 +101,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # 指标默认只在本地 profile 暴露；生产部署必须通过内网/鉴权入口读取。
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
   endpoint:
     health:
       show-details: always
+    metrics:
+      access: READ_ONLY
 
 logging:
   level:

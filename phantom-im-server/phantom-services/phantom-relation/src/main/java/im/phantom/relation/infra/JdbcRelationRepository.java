@@ -115,6 +115,20 @@ public class JdbcRelationRepository implements RelationRepository {
     }
 
     @Override
+    public DirectMessageRelationState directMessageRelationState(String senderId, String receiverId) {
+        return jdbc.queryForObject("""
+                SELECT
+                  EXISTS(SELECT 1 FROM blacklist WHERE user_id=? AND blocked_id=?) AS sender_blocked_receiver,
+                  EXISTS(SELECT 1 FROM blacklist WHERE user_id=? AND blocked_id=?) AS receiver_blocked_sender,
+                  EXISTS(SELECT 1 FROM friend_relation WHERE user_id=? AND friend_id=?) AS sender_has_peer,
+                  EXISTS(SELECT 1 FROM friend_relation WHERE user_id=? AND friend_id=?) AS peer_has_sender
+                """, (rs, rowNum) -> new DirectMessageRelationState(
+                rs.getBoolean("sender_blocked_receiver"), rs.getBoolean("receiver_blocked_sender"),
+                rs.getBoolean("sender_has_peer"), rs.getBoolean("peer_has_sender")),
+                senderId, receiverId, receiverId, senderId, senderId, receiverId, receiverId, senderId);
+    }
+
+    @Override
     public int countFriends(String userId) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM friend_relation WHERE user_id=?",
                 Integer.class, userId);

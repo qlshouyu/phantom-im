@@ -3,6 +3,7 @@ package im.phantom.fanout.app;
 import im.phantom.api.route.OnlineDeliveryService;
 import im.phantom.common.ConvIds;
 import im.phantom.fanout.infra.UserTimelineWriteDao;
+import im.phantom.fanout.FanoutDeliveryProperties;
 import im.phantom.infra.redis.SeqAllocator;
 import im.phantom.proto.v1.ConvType;
 import im.phantom.proto.v1.Msg;
@@ -17,6 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.util.stream.IntStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -118,5 +121,35 @@ class FanoutServiceTest {
                 eq("m_group"), any(byte[].class), anyLong());
         verify(delivery, org.mockito.Mockito.times(500)).deliver(anyString(), any());
         org.assertj.core.api.Assertions.assertThat(elapsedMs).isLessThan(5_000L);
+    }
+
+    @Test
+    void consumerThreadReturnsWithoutWaitingForSlowOnlineDelivery() throws Exception {
+        FanoutDeliveryProperties properties = new FanoutDeliveryProperties();
+        properties.setWorkerThreads(1);
+        properties.setShutdownTimeoutMs(500);
+        FanoutDeliveryExecutor executor = new FanoutDeliveryExecutor(properties, null);
+        FanoutService asyncService = new FanoutService(dao, seqAllocator, delivery,
+                null, null, null, executor);
+        CountDownLatch deliveryStarted = new CountDownLatch(1);
+        CountDownLatch releaseDelivery = new CountDownLatch(1);
+        when(dao.exists(anyString(), eq("m_1"))).thenReturn(false);
+        when(seqAllocator.nextUserSeq(anyString())).thenReturn(1L);
+        when(delivery.deliver(anyString(), any())).thenAnswer(invocation -> {
+            deliveryStarted.countDown();
+            releaseDelivery.await(2, TimeUnit.SECONDS);
+            return 1;
+        });
+        try {
+            long started = System.nanoTime();
+            asyncService.onNewMessage(message);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+            org.assertj.core.api.Assertions.assertThat(elapsedMs).isLessThan(500L);
+            org.assertj.core.api.Assertions.assertThat(deliveryStarted.await(1, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            releaseDelivery.countDown();
+            executor.shutdown();
+        }
     }
 }

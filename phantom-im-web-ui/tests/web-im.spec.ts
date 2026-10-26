@@ -81,6 +81,17 @@ test("真实注册登录、好友、单聊、代理与 Token 刷新", async ({ b
   await expect(alice.getByTestId("connection-status")).toHaveText("已下线", { timeout: 20_000 });
   await expect(alice.getByTestId("diagnostics-panel")).toContainText("SAME_TYPE_LOGIN", { timeout: 20_000 });
 
+  // 踢下线是终止态，页面不得自行重连。
+  await alice.waitForTimeout(1_500);
+  await expect(alice.getByTestId("connection-status")).toHaveText("已下线");
+  await expect(secondTab.getByTestId("connection-status")).toHaveText("在线");
+
+  // 用户显式重连后，旧连接提示必须随新的 online 状态一起清除。
+  await alice.getByTestId("disconnect-reconnect").click();
+  await expect(alice.getByTestId("connection-status")).toHaveText("在线", { timeout: 20_000 });
+  await expect(alice.locator(".kicked-banner")).toHaveCount(0);
+  await expect(secondTab.getByTestId("connection-status")).toHaveText("已下线", { timeout: 20_000 });
+
   await contextA.close();
   await contextB.close();
 });

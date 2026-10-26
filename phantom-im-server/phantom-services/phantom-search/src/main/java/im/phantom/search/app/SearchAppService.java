@@ -4,6 +4,10 @@ import im.phantom.common.BizException;
 import im.phantom.common.ErrorCodes;
 import im.phantom.proto.v1.Msg;
 import im.phantom.proto.v1.MsgType;
+import im.phantom.proto.v1.GroupEvent;
+import im.phantom.proto.v1.ProfileEvent;
+import im.phantom.proto.v1.RelationEvent;
+import im.phantom.proto.v1.SyncEvent;
 import im.phantom.proto.v1.SyncEventEnvelope;
 import im.phantom.search.app.SearchDtos.ContactHit;
 import im.phantom.search.app.SearchDtos.ConversationSearch;
@@ -97,8 +101,88 @@ public class SearchAppService {
     @Transactional
     public void onSyncEvent(byte[] payload) throws Exception {
         SyncEventEnvelope envelope = SyncEventEnvelope.parseFrom(payload);
-        if (!envelope.getUserId().isBlank()) {
-            reindexUser(envelope.getUserId());
+        String userId = envelope.getUserId();
+        SyncEvent event = envelope.getEvent();
+        switch (event.getEventCase()) {
+            case NEW_MESSAGE -> {
+                if (event.getNewMessage().hasMsg()) {
+                    indexMessage(event.getNewMessage().getMsg());
+                }
+            }
+            case RECALL -> repository.message(event.getRecall().getMsgId()).ifPresent(this::indexMessage);
+            case RELATION -> applyRelation(userId, event.getRelation());
+            case GROUP -> applyGroup(userId, event.getGroup());
+            case PROFILE -> applyProfile(userId, event.getProfile());
+            // 草稿、送达/已读、会话置顶/免打扰、举报提示等不改变搜索可见内容。
+            case DRAFT, READ_POSITION, READ_RECEIPT, CONV_STATE, MSG_STATUS, REPORT,
+                    RESTRICTED_DELIVERY, EVENT_NOT_SET -> { }
+        }
+    }
+
+    /** 显式运维/管理入口；普通消息与同步事件不得调用。 */
+    @Transactional
+    public void rebuildUser(String userId) {
+        reindexUser(userId);
+    }
+
+    private void applyRelation(String userId, RelationEvent event) {
+        switch (event.getType()) {
+            case RELATION_EVENT_TYPE_APPLY_ACCEPTED,
+                    RELATION_EVENT_TYPE_FRIEND_SETTING_CHANGED -> upsertContact(userId, event.getPeerId());
+            case RELATION_EVENT_TYPE_FRIEND_DELETED,
+                    RELATION_EVENT_TYPE_BLACKLIST_ADDED -> repository.deleteContactDocument(
+                    userId, event.getPeerId());
+            default -> { }
+        }
+    }
+
+    private void applyGroup(String userId, GroupEvent event) {
+        switch (event.getType()) {
+            case GROUP_EVENT_TYPE_MEMBER_JOINED, GROUP_EVENT_TYPE_PROFILE_CHANGED,
+                    GROUP_EVENT_TYPE_NICKNAME_CHANGED -> upsertGroup(userId, event.getGroupId());
+            case GROUP_EVENT_TYPE_MEMBER_LEFT, GROUP_EVENT_TYPE_MEMBER_KICKED,
+                    GROUP_EVENT_TYPE_DISSOLVED -> {
+                repository.deleteGroupDocument(userId, event.getGroupId());
+                String convId = repository.conversationIdForGroup(event.getGroupId());
+                if (convId != null && !convId.isBlank()) {
+                    repository.deleteConversationDocumentsForOwner(userId, convId);
+                }
+            }
+            default -> { }
+        }
+    }
+
+    private void applyProfile(String userId, ProfileEvent event) {
+        switch (event.getType()) {
+            case PROFILE_EVENT_TYPE_FRIEND_REMARK -> upsertContact(userId, event.getTargetId());
+            case PROFILE_EVENT_TYPE_MY_PROFILE -> refreshContactDocuments(userId);
+            case PROFILE_EVENT_TYPE_MY_SETTINGS, PROFILE_EVENT_TYPE_UNSPECIFIED -> { }
+        }
+    }
+
+    private void upsertContact(String ownerId, String peerId) {
+        String appId = repository.appIdForUser(ownerId);
+        if (appId == null || peerId == null || peerId.isBlank()) return;
+        repository.contact(ownerId, peerId).ifPresent(contact ->
+                repository.upsertDocument("contact:" + ownerId + ":" + peerId, appId, "CONTACT",
+                        ownerId, null, null, contact.nickname(), contact.remark(), System.currentTimeMillis()));
+    }
+
+    private void upsertGroup(String ownerId, String groupId) {
+        String appId = repository.appIdForUser(ownerId);
+        if (appId == null || groupId == null || groupId.isBlank()) return;
+        repository.group(ownerId, groupId).ifPresent(group ->
+                repository.upsertDocument("group:" + ownerId + ":" + groupId, appId, "GROUP",
+                        ownerId, group.convId(), null, group.name(), "", System.currentTimeMillis()));
+    }
+
+    private void refreshContactDocuments(String userId) {
+        String appId = repository.appIdForUser(userId);
+        if (appId == null) return;
+        long now = System.currentTimeMillis();
+        for (var contact : repository.contacts(userId, "", 10_000)) {
+            repository.upsertDocument("contact:" + userId + ":" + contact.userId(), appId, "CONTACT",
+                    userId, null, null, contact.nickname(), contact.remark(), now);
         }
     }
 

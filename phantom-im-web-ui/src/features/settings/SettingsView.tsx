@@ -6,7 +6,7 @@ type Row = Record<string, any>;
 
 export function SettingsView() {
   const account = useAppStore((state) => state.account)!;
-  const connection = useAppStore((state) => state.connection);
+  const connection = useAppStore((state) => state.connection.status);
   const [devices, setDevices] = useState<Row[]>([]);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [previewEnabled, setPreviewEnabled] = useState(false);

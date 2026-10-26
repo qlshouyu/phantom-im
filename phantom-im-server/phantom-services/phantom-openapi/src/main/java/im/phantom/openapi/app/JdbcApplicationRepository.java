@@ -23,10 +23,12 @@ public class JdbcApplicationRepository implements ApplicationRepository {
                 app.appId(), app.name(), app.status(), app.createdAt(), app.updatedAt());
         jdbc.update("""
                 INSERT INTO app_config(app_id, relation_hosted, read_receipt_enabled, burn_after_read_enabled,
-                    burn_after_read_ttl_seconds, sdk_profile_write_enabled, max_devices, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    burn_after_read_ttl_seconds, risk_check_enabled, sdk_profile_write_enabled, max_devices,
+                    updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, app.appId(), config.relationHosted(), config.readReceiptEnabled(), config.burnAfterReadEnabled(),
-                config.burnAfterReadTtlSeconds(), config.sdkProfileWriteEnabled(), config.maxDevices(), app.updatedAt());
+                config.burnAfterReadTtlSeconds(), config.riskCheckEnabled(), config.sdkProfileWriteEnabled(),
+                config.maxDevices(), app.updatedAt());
         jdbc.update("""
                 INSERT INTO app_secret_version(app_id, secret_version, secret_hash, secret_ciphertext, status,
                     created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -39,14 +41,16 @@ public class JdbcApplicationRepository implements ApplicationRepository {
         return jdbc.query("""
                 SELECT a.app_id, a.name, a.status, a.created_at, a.updated_at,
                        c.relation_hosted, c.read_receipt_enabled, c.burn_after_read_enabled,
-                       c.burn_after_read_ttl_seconds, c.sdk_profile_write_enabled, c.max_devices
+                       c.burn_after_read_ttl_seconds, c.risk_check_enabled, c.sdk_profile_write_enabled,
+                       c.max_devices
                 FROM app a JOIN app_config c ON c.app_id=a.app_id WHERE a.app_id=?
                 """, rs -> rs.next() ? Optional.of(new ApplicationRecord(
                 rs.getString("app_id"), rs.getString("name"), rs.getString("status"),
                 rs.getLong("created_at"), rs.getLong("updated_at"), new AppFeatureConfigDto(
                 rs.getBoolean("relation_hosted"), rs.getBoolean("read_receipt_enabled"),
                 rs.getBoolean("burn_after_read_enabled"), rs.getInt("burn_after_read_ttl_seconds"),
-                rs.getBoolean("sdk_profile_write_enabled"), rs.getInt("max_devices")))) : Optional.empty(), appId);
+                rs.getBoolean("sdk_profile_write_enabled"), rs.getInt("max_devices"),
+                rs.getBoolean("risk_check_enabled")))) : Optional.empty(), appId);
     }
 
     @Override
@@ -91,10 +95,11 @@ public class JdbcApplicationRepository implements ApplicationRepository {
     public void updateFeatures(String appId, AppFeatureConfigDto config, long updatedAt) {
         jdbc.update("""
                 UPDATE app_config SET relation_hosted=?, read_receipt_enabled=?, burn_after_read_enabled=?,
-                    burn_after_read_ttl_seconds=?, sdk_profile_write_enabled=?, max_devices=?, updated_at=?
+                    burn_after_read_ttl_seconds=?, risk_check_enabled=?, sdk_profile_write_enabled=?,
+                    max_devices=?, updated_at=?
                 WHERE app_id=?
                 """, config.relationHosted(), config.readReceiptEnabled(), config.burnAfterReadEnabled(),
-                config.burnAfterReadTtlSeconds(), config.sdkProfileWriteEnabled(), config.maxDevices(),
-                updatedAt, appId);
+                config.burnAfterReadTtlSeconds(), config.riskCheckEnabled(), config.sdkProfileWriteEnabled(),
+                config.maxDevices(), updatedAt, appId);
     }
 }

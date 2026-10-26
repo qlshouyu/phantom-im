@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class SearchRepository {
@@ -81,6 +82,51 @@ public class SearchRepository {
 
     public void deleteConversationDocuments(String convId) {
         jdbc.update("DELETE FROM search_document WHERE conv_id=?", convId);
+    }
+
+    public Optional<ContactRow> contact(String ownerId, String peerId) {
+        return jdbc.query("""
+                SELECT u.user_id, p.nickname, COALESCE(s.remark,'') remark, p.avatar_url
+                FROM friend_relation r JOIN app_user u ON u.user_id=r.friend_id
+                JOIN user_profile p ON p.user_id=u.user_id
+                LEFT JOIN friend_setting s ON s.user_id=r.user_id AND s.friend_id=r.friend_id
+                WHERE r.user_id=? AND r.friend_id=? AND u.status='ACTIVE'
+                  AND NOT EXISTS (SELECT 1 FROM blacklist b WHERE b.user_id=? AND b.blocked_id=r.friend_id)
+                """, rs -> rs.next() ? Optional.of(new ContactRow(rs.getString(1), rs.getString(2),
+                rs.getString(3), rs.getString(4))) : Optional.empty(), ownerId, peerId, ownerId);
+    }
+
+    public Optional<GroupRow> group(String ownerId, String groupId) {
+        return jdbc.query("""
+                SELECT g.group_id, g.conv_id, g.name, g.avatar_url
+                FROM chat_group g JOIN group_member gm ON gm.group_id=g.group_id
+                WHERE gm.user_id=? AND gm.group_id=? AND gm.status='ACTIVE' AND g.status='ACTIVE'
+                """, rs -> rs.next() ? Optional.of(new GroupRow(rs.getString(1), rs.getString(2),
+                rs.getString(3), rs.getString(4))) : Optional.empty(), ownerId, groupId);
+    }
+
+    public Optional<Msg> message(String msgId) {
+        return jdbc.query("SELECT msg_bytes FROM conv_timeline WHERE msg_id=?",
+                rs -> rs.next() ? Optional.of(parse(rs.getBytes(1))) : Optional.empty(), msgId);
+    }
+
+    public void deleteContactDocument(String ownerId, String peerId) {
+        jdbc.update("DELETE FROM search_document WHERE doc_id=?",
+                "contact:" + ownerId + ":" + peerId);
+    }
+
+    public void deleteGroupDocument(String ownerId, String groupId) {
+        jdbc.update("DELETE FROM search_document WHERE doc_id=?",
+                "group:" + ownerId + ":" + groupId);
+    }
+
+    public void deleteConversationDocumentsForOwner(String ownerId, String convId) {
+        jdbc.update("DELETE FROM search_document WHERE owner_id=? AND conv_id=?", ownerId, convId);
+    }
+
+    public String conversationIdForGroup(String groupId) {
+        return jdbc.query("SELECT conv_id FROM chat_group WHERE group_id=?",
+                rs -> rs.next() ? rs.getString(1) : null, groupId);
     }
 
     public String appIdForUser(String userId) {

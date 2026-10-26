@@ -19,10 +19,10 @@ public class SearchEventConsumer implements SmartInitializingSingleton {
 
     @Override public void afterSingletonsInstantiated() {
         try {
-            consumers.newConsumer("phantom-search-message", Topics.MSG_EVENT, Topics.TAG_NEW_MSG, body -> {
+            consumers.newConsumer("phantom-search-message", Topics.MSG_EVENT, Topics.TAG_NEW_MSG, "search", body -> {
                 search.indexMessage(Msg.parseFrom(body)); return true;
             });
-            consumers.newConsumer("phantom-search-sync", Topics.SYNC_EVENT, Topics.TAG_STATE_CHANGED, body -> {
+            consumers.newConsumer("phantom-search-sync", Topics.SYNC_EVENT, Topics.TAG_STATE_CHANGED, "search", body -> {
                 search.onSyncEvent(body); return true;
             });
         } catch (Exception error) {

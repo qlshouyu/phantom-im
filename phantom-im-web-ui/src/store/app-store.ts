@@ -4,11 +4,26 @@ import type {
   Account, Conversation, DiagnosticEvent, NavKey, RuntimeConfig, SearchResults,
 } from "../types";
 
+export type ConnectionStatus =
+  | "idle"
+  | "connecting"
+  | "authing"
+  | "online"
+  | "reconnecting"
+  | "closed"
+  | "kicked"
+  | "auth-failed";
+
+export interface ConnectionState {
+  status: ConnectionStatus;
+  kickedReason: string | null;
+}
+
 interface AppState {
   account: Account | null;
   runtime: RuntimeConfig | null;
   nav: NavKey;
-  connection: string;
+  connection: ConnectionState;
   activeConvId: string | null;
   conversations: Conversation[];
   messagesByConv: Record<string, ChatMessage[]>;
@@ -17,12 +32,11 @@ interface AppState {
   drafts: Record<string, string>;
   diagnostics: DiagnosticEvent[];
   search: SearchResults | null;
-  kickedReason: string | null;
   highlightConvSeq: number | null;
   setAccount: (account: Account | null) => void;
   setRuntime: (runtime: RuntimeConfig | null) => void;
   setNav: (nav: NavKey) => void;
-  setConnection: (connection: string) => void;
+  setConnection: (status: ConnectionStatus, kickedReason?: string | null) => void;
   setActiveConversation: (convId: string | null) => void;
   setConversations: (items: Conversation[]) => void;
   appendConversations: (items: Conversation[]) => void;
@@ -34,7 +48,6 @@ interface AppState {
   setDraft: (convId: string, draft: string) => void;
   addDiagnostic: (type: string, detail: unknown) => void;
   setSearch: (search: SearchResults | null) => void;
-  setKickedReason: (reason: string | null) => void;
   setHighlightConvSeq: (seq: number | null) => void;
   resetSession: () => void;
 }
@@ -67,7 +80,7 @@ const initialSession = {
   account: null,
   runtime: null,
   nav: "chat" as NavKey,
-  connection: "idle",
+  connection: { status: "idle", kickedReason: null } as ConnectionState,
   activeConvId: null,
   conversations: [],
   messagesByConv: {},
@@ -76,19 +89,30 @@ const initialSession = {
   drafts: {},
   diagnostics: [],
   search: null,
-  kickedReason: null,
   highlightConvSeq: null,
 };
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   ...initialSession,
   setAccount: (account) => set({ account }),
   setRuntime: (runtime) => set({ runtime }),
   setNav: (nav) => set({ nav }),
-  setConnection: (connection) => {
-    set({ connection });
-    get().addDiagnostic("connection", connection);
-  },
+  setConnection: (status, kickedReason = null) => set((state) => {
+    const event: DiagnosticEvent = {
+      id: crypto.randomUUID(),
+      at: Date.now(),
+      type: "connection",
+      detail: status,
+    };
+    return {
+      connection: {
+        status,
+        // 踢下线原因只属于 kicked 状态；任何新连接状态都会原子地清除旧提示。
+        kickedReason: status === "kicked" ? kickedReason ?? "账号已在其他设备登录" : null,
+      },
+      diagnostics: [...state.diagnostics.slice(-199), event],
+    };
+  }),
   setActiveConversation: (activeConvId) => set({ activeConvId }),
   setConversations: (conversations) => set({ conversations: sortConversations(conversations) }),
   appendConversations: (items) => set((state) => {
@@ -145,7 +169,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { diagnostics: [...state.diagnostics.slice(-199), event] };
   }),
   setSearch: (search) => set({ search }),
-  setKickedReason: (kickedReason) => set({ kickedReason }),
   setHighlightConvSeq: (highlightConvSeq) => set({ highlightConvSeq }),
-  resetSession: () => set({ ...initialSession }),
+  // runtime 是应用级配置而非登录会话数据，退出后必须保留，避免登录页永久卡在加载态。
+  resetSession: () => set((state) => ({ ...initialSession, runtime: state.runtime })),
 }));

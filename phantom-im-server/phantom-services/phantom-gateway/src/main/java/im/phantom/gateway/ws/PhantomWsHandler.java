@@ -63,6 +63,7 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
     private final ObjectProvider<AppConfigProvider> appConfigs;
     private final DeviceRegistryService deviceRegistry;
     private final RedisRateLimiter rateLimiter;
+    private final SendCommandExecutor sendExecutor;
 
     public PhantomWsHandler(AuthService authService, RouteTableService routeTable, UserSeqQuery userSeqQuery,
                             ConnectionRegistry registry, CommandDispatcher dispatcher, AckCursorStore ackCursor,
@@ -72,7 +73,8 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
                             PresenceRegistry presenceRegistry,
                             ObjectProvider<AppConfigProvider> appConfigs,
                             DeviceRegistryService deviceRegistry,
-                            RedisRateLimiter rateLimiter) {
+                            RedisRateLimiter rateLimiter,
+                            SendCommandExecutor sendExecutor) {
         this.authService = authService;
         this.routeTable = routeTable;
         this.userSeqQuery = userSeqQuery;
@@ -87,6 +89,7 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
         this.appConfigs = appConfigs;
         this.deviceRegistry = deviceRegistry;
         this.rateLimiter = rateLimiter;
+        this.sendExecutor = sendExecutor;
     }
 
     @Override
@@ -195,24 +198,59 @@ public class PhantomWsHandler extends BinaryWebSocketHandler {
                 reply(session, Envelopes.resp(Command.COMMAND_LOGOUT_RESP, env.getCid(), ErrorCodes.OK, null));
                 closeQuietly(session, CloseStatus.NORMAL);
             }
+            case COMMAND_SEND_MSG_REQ -> dispatchSend(session, ctx, env);
             default -> {
-                if (cmd == Command.COMMAND_SEND_MSG_REQ
-                        && !rateLimiter.allow("ws_send_message", ctx.appId() + ":" + ctx.userId(),
-                        120, 60).allowed()) {
-                    reply(session, Envelopes.resp(cmd, env.getCid(), ErrorCodes.RATE_LIMITED, null));
-                    return;
-                }
                 CommandHandler handler = dispatcher.find(cmd.getNumber());
                 if (handler == null) {
                     log.warn("无处理器的指令: {}", cmd);
                     reply(session, Envelopes.resp(cmd, env.getCid(), ErrorCodes.INVALID_PARAM, null));
                     return;
                 }
-                Envelope resp = handler.handle(ctx, env);
-                if (resp != null) {
-                    reply(session, resp);
-                }
+                executeHandler(session, ctx, env, handler);
             }
+        }
+    }
+
+    private void dispatchSend(WebSocketSession session, SessionContext ctx, Envelope env) {
+        CommandHandler handler = dispatcher.find(Command.COMMAND_SEND_MSG_REQ_VALUE);
+        if (handler == null) {
+            log.warn("无 SEND_MSG_REQ 处理器");
+            reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(),
+                    ErrorCodes.INVALID_PARAM, null));
+            return;
+        }
+        boolean accepted = sendExecutor.submit(ctx.connId(),
+                () -> executeSend(session, ctx, env, handler),
+                () -> reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(),
+                        ErrorCodes.RATE_LIMITED, null)));
+        if (!accepted) {
+            reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(),
+                    ErrorCodes.RATE_LIMITED, null));
+        }
+    }
+
+    private void executeSend(WebSocketSession session, SessionContext ctx, Envelope env, CommandHandler handler) {
+        if (!rateLimiter.allow("ws_send_message", ctx.appId() + ":" + ctx.userId(),
+                props.getSendRateLimit(), props.getSendRateWindowSeconds()).allowed()) {
+            reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(),
+                    ErrorCodes.RATE_LIMITED, null));
+            return;
+        }
+        executeHandler(session, ctx, env, handler);
+    }
+
+    private void executeHandler(WebSocketSession session, SessionContext ctx, Envelope env, CommandHandler handler) {
+        try {
+            Envelope resp = handler.handle(ctx, env);
+            if (resp != null) {
+                reply(session, resp);
+            }
+        } catch (BizException error) {
+            reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(), error.code(), null));
+        } catch (Exception error) {
+            log.warn("指令处理异常 cmd={}: {}", env.getCmd(), error.toString());
+            reply(session, Envelopes.resp(Command.COMMAND_SEND_MSG_RESP, env.getCid(),
+                    ErrorCodes.SERVER_ERROR, null));
         }
     }
 

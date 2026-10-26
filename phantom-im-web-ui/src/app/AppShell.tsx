@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, logout } from "../services/api";
 import { connect, disconnect } from "../services/sdk-adapter";
@@ -24,17 +24,19 @@ export function AppShell() {
   const nav = useAppStore((state) => state.nav);
   const setNav = useAppStore((state) => state.setNav);
   const connection = useAppStore((state) => state.connection);
-  const kickedReason = useAppStore((state) => state.kickedReason);
   const resetSession = useAppStore((state) => state.resetSession);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [error, setError] = useState("");
+  const initialConnectStarted = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (connection === "idle" || connection === "closed") {
-      connect(account).catch((reason: Error) => setError(reason.message));
-    }
-  }, [account, connection]);
+    // 页面只负责首次启动连接；网络抖动由 SDK 的 reconnecting 状态处理，
+    // closed/kicked 均不得触发页面级自动重连，显式重连由诊断或重新登录流程发起。
+    if (connection.status !== "idle" || initialConnectStarted.current) return;
+    initialConnectStarted.current = true;
+    connect(account).catch((reason: Error) => setError(reason.message));
+  }, [account, connection.status]);
 
   async function signOut() {
     try {
@@ -67,11 +69,11 @@ export function AppShell() {
         </button>
       </nav>
 
-      <div className={`connection-pill ${connection}`} data-testid="connection-status">
-        {connection === "online" ? "在线" : connection === "kicked" ? "已下线" : connection}
+      <div className={`connection-pill ${connection.status}`} data-testid="connection-status">
+        {connection.status === "online" ? "在线" : connection.status === "kicked" ? "已下线" : connection.status}
       </div>
       {error && <div className="global-error" role="alert">{error}</div>}
-      {kickedReason && <div className="kicked-banner" role="alert">连接已断开：{kickedReason}</div>}
+      {connection.kickedReason && <div className="kicked-banner" role="alert">连接已断开：{connection.kickedReason}</div>}
 
       <div className="workspace">
         {nav === "chat" && <ChatView />}

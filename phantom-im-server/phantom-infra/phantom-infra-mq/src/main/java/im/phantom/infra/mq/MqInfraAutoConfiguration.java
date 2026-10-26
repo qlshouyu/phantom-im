@@ -19,7 +19,7 @@ public class MqInfraAutoConfiguration {
         return new MqConsumers(props, metrics);
     }
 
-    @Bean(destroyMethod = "close")
+    @Bean(initMethod = "start", destroyMethod = "close")
     public EventPublisher eventPublisher(MqProperties props) {
         return new RocketMqEventPublisher(props);
     }
