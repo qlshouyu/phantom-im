@@ -1,0 +1,67 @@
+// Phantom IM 通讯协议 - 长连接帧结构与指令集
+// 传输: WebSocket binary 帧，每帧一个 Envelope
+// 设计文档: docs/phantom-platform/architecture/2026-08-07-im-protocol-design.md 第 2 节
+syntax = "proto3";
+
+package phantom.v1;
+
+option java_package = "im.phantom.proto.v1";
+option java_multiple_files = true;
+option go_package = "phantom.im/proto/phantom/v1;phantomv1";
+
+// 指令集，按功能域分段编号:
+//   0x0001~0x00FF 连接管理  0x0100~0x01FF 消息
+//   0x0200~0x02FF 同步      0x0300~0x03FF 信令
+enum Command {
+  COMMAND_UNSPECIFIED = 0;
+
+  // ---- 连接管理 0x0001~0x00FF ----
+  COMMAND_AUTH_REQ = 0x0001;
+  COMMAND_AUTH_RESP = 0x0002;
+  COMMAND_PING = 0x0003;
+  COMMAND_PONG = 0x0004;
+  COMMAND_KICK_PUSH = 0x0005;
+  COMMAND_LOGOUT_REQ = 0x0006;
+  COMMAND_LOGOUT_RESP = 0x0007;
+
+  // ---- 消息 0x0100~0x01FF ----
+  COMMAND_SEND_MSG_REQ = 0x0100;
+  COMMAND_SEND_MSG_RESP = 0x0101;
+  COMMAND_MSG_PUSH = 0x0102;      // 服务端推送新消息，客户端必须回 MSG_ACK
+  COMMAND_MSG_ACK = 0x0103;
+  COMMAND_RECALL_MSG_REQ = 0x0104;
+  COMMAND_RECALL_MSG_RESP = 0x0105;
+  COMMAND_RECALL_PUSH = 0x0106;
+
+  // ---- 同步 0x0200~0x02FF ----
+  COMMAND_SYNC_REQ = 0x0200;
+  COMMAND_SYNC_RESP = 0x0201;
+  COMMAND_MARK_READ_REQ = 0x0202;
+  COMMAND_MARK_READ_RESP = 0x0203;
+  COMMAND_READ_RECEIPT_PUSH = 0x0204;
+  COMMAND_CONV_DIGEST_REQ = 0x0205;
+  COMMAND_CONV_DIGEST_RESP = 0x0206;
+  COMMAND_SYNC_EVENT_PUSH = 0x0207; // 关系/会话/群/资料等 SyncEvent 在线推送
+
+  // ---- 信令 0x0300~0x03FF ----
+  COMMAND_TYPING_SIGNAL = 0x0300;
+  COMMAND_TYPING_PUSH = 0x0301;
+  COMMAND_PRESENCE_SUB_REQ = 0x0302;
+  COMMAND_PRESENCE_SUB_RESP = 0x0303;
+  COMMAND_PRESENCE_UNSUB_REQ = 0x0304;
+  COMMAND_PRESENCE_PUSH = 0x0305;
+  COMMAND_APP_STATE_REQ = 0x0306;
+  COMMAND_APP_STATE_RESP = 0x0307;
+}
+
+// 统一帧封装。三类帧:
+//   Req  客户端→服务端，cid 由客户端单调递增
+//   Resp 服务端→客户端，回带请求 cid；code=0 成功，否则见 common.proto 错误码分段
+//   Push 服务端→客户端，cid=0；仅 MSG_PUSH 需要回 MSG_ACK
+message Envelope {
+  uint32 version = 1;  // 协议版本，当前为 1；不兼容升级时递增
+  Command cmd = 2;
+  uint64 cid = 3;
+  int32 code = 4;
+  bytes payload = 5;   // cmd 对应报文体的 Protobuf 序列化字节
+}

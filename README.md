@@ -2,13 +2,13 @@
 
 Phantom IM 是一个包含 PaaS 平台与消费方产品的 IM 工程：
 
-- `platform/`：Phantom IM PaaS，提供平台服务、通信契约、各端 SDK 和平台管理控制台。
-- `consumers/easy-im/`：基于 Phantom IM PaaS 构建的消费方 IM 产品，包含独立 BFF 和多终端客户端。
+- `phantom-platform/`：Phantom IM PaaS，提供平台服务、通信契约、各端 SDK 和平台管理控制台。
+- `phantom-im/`：基于 Phantom IM PaaS 构建的消费方 IM 产品，包含独立 BFF 和多终端客户端。
 
 ## 目录概览
 
 ```text
-platform/
+phantom-platform/
 ├── server/                         # Spring Boot / JDK 21 Maven 聚合工程
 │   └── phantom-admin-console/     # 平台管理控制台（独立 npm 工程）
 ├── contracts/
@@ -16,7 +16,7 @@ platform/
 │   └── openapi/                    # HTTP OpenAPI 契约
 └── sdks/web/                       # @phantom/sdk-web
 
-consumers/easy-im/
+phantom-im/
 ├── bff/                            # Easy IM 账号、Session、UserToken 与 HTTP BFF
 └── clients/web/                    # Easy IM Web 客户端
 ```
@@ -24,7 +24,7 @@ consumers/easy-im/
 ## 当前状态
 
 - Phantom 平台服务和 Web SDK 已具备 M0 链路。
-- `consumers/easy-im/clients/web/` 当前是新 UI 壳，使用本地模拟数据。
+- `phantom-im/clients/web/` 当前是新 UI 壳，使用本地模拟数据。
 - Easy IM 的 BFF、SDK、WebSocket 和真实业务数据接入尚待后续实现。
 - 原 `phantom-im-web-ui/` 已移除，不再作为 Easy IM 客户端维护。
 
@@ -40,7 +40,7 @@ docker compose -f deploy/local/rocketmq/docker-compose.yml up -d
 ### 2. Phantom 平台单体
 
 ```bash
-cd platform/server
+cd phantom-platform/server
 mvn -DskipTests package
 java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 ```
@@ -50,18 +50,18 @@ java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 ### 3. Easy IM BFF
 
 ```bash
-cd consumers/easy-im/bff
+cd phantom-im/bff
 cp .env.example .env
 set -a; source .env; set +a
 mvn -s .mvn/settings.xml spring-boot:run
 ```
 
-BFF 默认端口为 `28090`。完整配置见 [`consumers/easy-im/README.md`](consumers/easy-im/README.md)。
+BFF 默认端口为 `28090`。完整配置见 [`phantom-im/README.md`](phantom-im/README.md)。
 
 ### 4. Easy IM Web UI
 
 ```bash
-cd consumers/easy-im/clients/web
+cd phantom-im/clients/web
 npm install
 npm run dev
 ```
@@ -71,7 +71,7 @@ npm run dev
 ## 平台管理控制台
 
 ```bash
-cd platform/server/phantom-admin-console
+cd phantom-platform/server/phantom-admin-console
 npm install
 npm run dev
 ```
@@ -82,13 +82,13 @@ npm run dev
 
 ```bash
 # 平台服务端
-cd platform/server && mvn test
+cd phantom-platform/server && mvn test
 
 # Web SDK
-cd platform/sdks/web && npm test && npm run typecheck
+cd phantom-platform/sdks/web && npm test && npm run typecheck
 
 # Easy IM BFF
-cd consumers/easy-im/bff && mvn -s .mvn/settings.xml test
+cd phantom-im/bff && mvn -s .mvn/settings.xml test
 
 # 快速冒烟（需启动平台服务与中间件）
 cd tools/e2e-smoke && node smoke.mjs

@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROTO_DIR = path.resolve(__dirname, "../../proto");
+const PROTO_DIR = path.resolve(__dirname, "../../phantom-platform/contracts/proto");
 const WS_URL = "ws://127.0.0.1:28080/ws";
 const APP_ID = "app_demo";
 const APP_SECRET = "phantom_demo_secret_please_change_0123456789";

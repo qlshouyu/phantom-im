@@ -5,11 +5,11 @@ context: |
   用户身份仅 Phantom ID，鉴权由接入方服务端签发 UserToken(JWT HS256)。
 
   上游规格（docs/ 下已评审/待评审）：
-    - docs/platform/prd/                                       PRD 10 个功能域 + 路线图
-    - docs/platform/architecture/2026-08-07-im-protocol-design.md      通讯协议(WSS+Protobuf / HTTP+JSON / 双 Timeline)
-    - docs/platform/architecture/2026-08-07-im-mq-architecture-design.md 消息核心架构(RocketMQ 事务/顺序/延时消息)
-    - docs/platform/architecture/2026-08-25-server-project-structure-design.md 服务端工程结构(Maven 多模块·可分可合)
-    - platform/contracts/proto/phantom/v1/*.proto                         已写就的报文契约(envelope/common/message/sync/signaling)
+    - docs/phantom-platform/prd/                                       PRD 10 个功能域 + 路线图
+    - docs/phantom-platform/architecture/2026-08-07-im-protocol-design.md      通讯协议(WSS+Protobuf / HTTP+JSON / 双 Timeline)
+    - docs/phantom-platform/architecture/2026-08-07-im-mq-architecture-design.md 消息核心架构(RocketMQ 事务/顺序/延时消息)
+    - docs/phantom-platform/architecture/2026-08-25-server-project-structure-design.md 服务端工程结构(Maven 多模块·可分可合)
+    - phantom-platform/contracts/proto/phantom/v1/*.proto                         已写就的报文契约(envelope/common/message/sync/signaling)
 
   技术栈：Java + Spring Boot 4.x(Spring Framework 7 / Jakarta EE / JDK 21 虚拟线程)、
     Maven 单一聚合工程(monorepo，每服务一 module)、RocketMQ 5.x、MySQL、Redis、Nacos。

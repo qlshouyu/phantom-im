@@ -104,10 +104,14 @@ Web IM SHALL 根据消息类型、发送者和服务端权限提供引用、转�
 
 ### Requirement: 联系人与好友申请
 
-Web IM SHALL 展示当前用户 Phantom ID、好友列表、好友申请和黑名单，并支持按 Phantom ID 发起好友申请、接受或拒绝申请、拉黑、解除拉黑、开始单聊和查看联系人资料。关系变化 MUST 通过 SDK 同步事件刷新界面。
+Web IM SHALL 展示当前用户 Phantom ID、好友列表、好友申请和黑名单，并支持输入登录名或 Phantom ID 查找用户、确认头像与资料后发起好友申请、接受或拒绝申请、拉黑、解除拉黑、开始单聊和查看联系人资料。登录名解析 MUST 由接入方 BFF 完成，平台好友申请 MUST 使用解析后的 Phantom ID。关系变化 MUST 通过 SDK 同步事件刷新界面。
+
+#### Scenario: 确认资料后发起好友申请
+- **WHEN** 用户 A 输入用户 B 的登录名或 Phantom ID 并进入下一步
+- **THEN** Web IM 展示 B 的头像、昵称、登录名和 Phantom ID，A 确认后再发送好友申请
 
 #### Scenario: 发起并接受好友申请
-- **WHEN** 用户 A 按 Phantom ID 向用户 B 发起申请且 B 接受
+- **WHEN** 用户 A 确认用户 B 的资料后发送好友申请且 B 接受
 - **THEN** 双方好友列表更新并能进入同一单聊会话
 
 #### Scenario: 离线期间关系变化

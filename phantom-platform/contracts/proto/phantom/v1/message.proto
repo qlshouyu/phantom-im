@@ -1,0 +1,204 @@
+// Phantom IM 通讯协议 - 消息模型与收发/撤回指令
+// 设计文档: docs/phantom-platform/architecture/2026-08-07-im-protocol-design.md 第 3 节
+syntax = "proto3";
+
+package phantom.v1;
+
+import "phantom/v1/common.proto";
+
+option java_package = "im.phantom.proto.v1";
+option java_multiple_files = true;
+option go_package = "phantom.im/proto/phantom/v1;phantomv1";
+
+// 消息类型（MSG-01~08、MSG-12，SYSTEM 承载各类系统提示）
+enum MsgType {
+  MSG_TYPE_UNSPECIFIED = 0;
+  MSG_TYPE_TEXT = 1;      // 文本 ≤5000 字符（MSG-01）
+  MSG_TYPE_EMOJI = 2;     // 内置表情包（MSG-02，Unicode emoji 走 TEXT）
+  MSG_TYPE_IMAGE = 3;     // MSG-03
+  MSG_TYPE_VOICE = 4;     // ≤60s（MSG-04）
+  MSG_TYPE_VIDEO = 5;     // ≤5min / 100MB（MSG-05）
+  MSG_TYPE_FILE = 6;      // ≤500MB（MSG-06）
+  MSG_TYPE_LOCATION = 7;  // P1（MSG-07）
+  MSG_TYPE_CARD = 8;      // 名片 P1（MSG-08）
+  MSG_TYPE_MERGED = 9;    // 合并转发（MSG-12）
+  MSG_TYPE_SYSTEM = 10;   // 系统提示（建群/入群/受限投递提示等）
+  MSG_TYPE_CALL_RECORD = 11; // 预留：Phase 2 音视频通话记录
+}
+
+// 消息状态机（MSG-09）。服务端下发时以该字段表示当前最终状态。
+enum MsgStatus {
+  MSG_STATUS_UNSPECIFIED = 0;
+  MSG_STATUS_SENDING = 1;
+  MSG_STATUS_SENT = 2;
+  MSG_STATUS_DELIVERED = 3;
+  MSG_STATUS_READ = 4;
+  MSG_STATUS_FAILED = 5;
+}
+
+message TextContent {
+  string text = 1;
+}
+
+message EmojiContent {
+  string emoji_id = 1;  // 内置表情包 id
+}
+
+message ImageContent {
+  string media_id = 1;
+  string url = 2;
+  string thumb_url = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  uint64 size_bytes = 6;
+}
+
+message VoiceContent {
+  string media_id = 1;
+  string url = 2;
+  uint32 duration_s = 3;
+}
+
+message VideoContent {
+  string media_id = 1;
+  string url = 2;
+  string cover_url = 3;
+  uint32 duration_s = 4;
+  uint64 size_bytes = 5;
+  uint32 width = 6;
+  uint32 height = 7;
+}
+
+message FileContent {
+  string media_id = 1;
+  string url = 2;
+  string file_name = 3;
+  uint64 size_bytes = 4;
+  string ext = 5;
+}
+
+message LocationContent {
+  double latitude = 1;
+  double longitude = 2;
+  string poi_name = 3;
+  string address = 4;
+}
+
+message CardContent {
+  ConvType card_type = 1;   // SINGLE=用户名片 GROUP=群名片
+  string target_id = 2;
+  string snapshot_name = 3;    // 转发时刻的昵称/群名快照
+  string snapshot_avatar = 4;
+}
+
+// 合并转发（≤100 条；不可嵌套 MERGED，03 边界）
+message MergedContent {
+  string title = 1;             // 如"张三和李四的聊天记录"
+  repeated Msg messages = 2;    // 原始消息快照（含各自发送人与时间）
+}
+
+// 系统提示：模板 id + 参数，客户端按模板渲染多语言文案
+message SystemContent {
+  string template_id = 1;                // 如 "group.created" / "friend.accepted" / "delivery.restricted"
+  map<string, string> params = 2;
+}
+
+message MsgContent {
+  oneof content {
+    TextContent text = 1;
+    EmojiContent emoji = 2;
+    ImageContent image = 3;
+    VoiceContent voice = 4;
+    VideoContent video = 5;
+    FileContent file = 6;
+    LocationContent location = 7;
+    CardContent card = 8;
+    MergedContent merged = 9;
+    SystemContent system = 10;
+  }
+}
+
+// 引用摘要快照：原消息撤回/删除后引用块仍可展示（03 边界"撤回后再引用"）
+message ReplySnapshot {
+  string sender_id = 1;
+  string sender_name = 2;
+  MsgType msg_type = 3;
+  string digest = 4;  // 文本摘要或类型占位符如 "[图片]"
+}
+
+// 消息实体（标识体系见设计文档 3.1）
+message Msg {
+  string msg_id = 1;          // 服务端全局唯一
+  string client_msg_id = 2;   // 客户端 UUID，幂等去重键（MSG-16）
+  string conv_id = 3;
+  ConvType conv_type = 4;
+  string sender_id = 5;
+  MsgType msg_type = 6;
+  MsgContent content = 7;
+  int64 conv_seq = 8;         // 会话内严格递增，排序唯一依据（MSG-15）
+  int64 server_time = 9;      // 毫秒，服务端时钟
+  string reply_to_msg_id = 10;
+  ReplySnapshot reply_snapshot = 11;
+  repeated string mentions = 12;  // 被 @ 的 userId；哨兵值 "ALL" 表示 @全体（GC-13/14）
+  bool recalled = 13;         // 下发时已合并撤回态（07 边界"撤回优先"）
+  MsgStatus status = 14;      // 当前消息状态（MSG-09），状态只能前进
+  bool restricted = 15;       // 受限投递（DC-16/18），不向接收者透出原因
+  uint32 burn_after_read_ttl_seconds = 16; // 阅后即焚 TTL；0 表示不启用
+  bool is_request = 17;       // 非好友首条消息进入消息请求分区（SEC-14）
+}
+
+// ---- 发送 ----
+
+message SendMsgReq {
+  string client_msg_id = 1;
+  string conv_id = 2;
+  ConvType conv_type = 3;
+  MsgType msg_type = 4;
+  MsgContent content = 5;
+  string reply_to_msg_id = 6;
+  repeated string mentions = 7;
+}
+
+// code=0 时有效；受限投递（DC-16/18）也返回成功，不透露原因，
+// 后续经 SyncEvent.restricted_delivery 下发系统提示
+message SendMsgResp {
+  string msg_id = 1;
+  int64 conv_seq = 2;
+  int64 server_time = 3;
+}
+
+// ---- 接收（必达: Push + Ack + Sync 兜底，设计文档 3.5）----
+
+message MsgPush {
+  Msg msg = 1;
+  int64 user_seq = 2;  // 该事件在接收者同步 Timeline 中的编号
+}
+
+message MsgAck {
+  int64 user_seq = 1;  // 确认到的 userSeq，与 SyncReq.since_user_seq 同一游标
+}
+
+// ---- 撤回（2 分钟窗口按服务端时钟判定，MSG-11）----
+
+message RecallMsgReq {
+  string msg_id = 1;
+}
+
+message RecallMsgResp {
+  string msg_id = 1;
+}
+
+message RecallPush {
+  string msg_id = 1;
+  string conv_id = 2;
+  string operator_id = 3;  // 撤回操作者；系统风控撤回时为哨兵值 "SYSTEM"
+  int64 user_seq = 4;
+}
+
+// 发送者侧消息状态变更：DELIVERED/READ 等状态只进不退（MSG-09）。
+message MsgStatusEvent {
+  string msg_id = 1;
+  string conv_id = 2;
+  MsgStatus status = 3;
+  int64 status_time = 4;
+}

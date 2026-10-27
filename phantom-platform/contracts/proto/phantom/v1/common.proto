@@ -1,0 +1,59 @@
+// Phantom IM 通讯协议 - 公共类型
+// 设计文档: docs/phantom-platform/architecture/2026-08-07-im-protocol-design.md
+syntax = "proto3";
+
+package phantom.v1;
+
+option java_package = "im.phantom.proto.v1";
+option java_multiple_files = true;
+option go_package = "phantom.im/proto/phantom/v1;phantomv1";
+
+// 设备类型（MD-01 三类设备，同类型互踢 MD-02）
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  DEVICE_TYPE_MOBILE = 1;   // iOS / Android
+  DEVICE_TYPE_DESKTOP = 2;  // Windows / macOS
+  DEVICE_TYPE_WEB = 3;
+}
+
+// 会话类型（预留 CHANNEL 供路线图演进）
+enum ConvType {
+  CONV_TYPE_UNSPECIFIED = 0;
+  CONV_TYPE_SINGLE = 1;  // 单聊: conv_id = "si_" + hash(sorted(uidA, uidB))
+  CONV_TYPE_GROUP = 2;   // 群聊: conv_id = "gr_" + group_id
+  CONV_TYPE_CHANNEL = 3; // 预留
+}
+
+// 在线状态（DC-05，离线不透出精确时间）
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_ONLINE = 1;
+  PRESENCE_STATUS_AWAY = 2;    // 最后活跃于 X 分钟前
+  PRESENCE_STATUS_OFFLINE = 3;
+}
+
+// 用户资料摘要（会话/消息展示用途）
+// 平台化（PRD 01 v0.2）：资料由接入方经 OpenAPI 或 SDK 写入，user_id 即 Phantom ID
+message UserLite {
+  string user_id = 1;
+  string nickname = 2;
+  string avatar_url = 3;
+  // 扩展字段：承载后续新增的展示信息（如徽章、认证标识、状态文案等），
+  // 客户端对未识别的 key 忽略处理，避免协议升级引发不兼容
+  map<string, string> ext = 15;
+}
+
+// 错误码分段约定（与 HTTP API 共用一套，详见设计文档第 7 节）:
+//   0     成功
+//   1xxx  通用: 1001 INVALID_PARAM / 1002 SERVER_ERROR / 1003 RATE_LIMITED / 1004 UPGRADE_REQUIRED
+//   2xxx  鉴权/设备: 2001 TOKEN_EXPIRED（UserToken 过期）/ 2002 TOKEN_REVOKED（吊销/秘钥应急轮换）
+//         2003 AUTH_FAILED（验签失败/AppID 无效）/ 2004 USER_DISABLED（接入方禁用）
+//         2005 DEVICE_LIMIT_EXCEEDED / 2006 废弃（原扫码登录 QRCODE_EXPIRED，编号保留）
+//   3xxx  关系/权限: 3001 USER_NOT_FOUND / 3002 NOT_FRIEND / 3003 IN_MY_BLACKLIST
+//         3004 REJECTED_BY_PEER / 3005 FRIEND_LIMIT_EXCEEDED / 3006 DUPLICATE_APPLY / 3007 ALREADY_HANDLED
+//   4xxx  消息: 4001 MSG_TOO_LONG / 4002 CONV_INVALID / 4003 RECALL_TIMEOUT
+//         4004 ALREADY_RECALLED / 4005 CONTENT_BLOCKED / 4006 MEDIA_TOO_LARGE
+//         4007 BURN_MODE_FORBIDDEN（阅后即焚模式下禁用的能力）
+//   5xxx  群: 5001 GROUP_FULL / 5002 NO_PERMISSION / 5003 MUTED / 5004 GROUP_DISSOLVED
+//         5005 MENTION_ALL_RATE_LIMITED / 5006 NOT_IN_GROUP
+//   6xxx  风控/合规: 6001 ACCOUNT_RESTRICTED / 6002 ACCOUNT_BANNED / 6003 MINOR_MODE_FORBIDDEN

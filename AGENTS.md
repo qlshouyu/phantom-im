@@ -7,14 +7,14 @@
 
 ## 项目结构与模块组织
 
-- `platform/server/`：JDK 21 Spring Boot Maven 聚合工程。共享契约位于 `phantom-common` 和 `phantom-service-api`；基础设施 starter 位于 `phantom-infra/*`；业务服务位于 `phantom-services/*`；装配入口位于 `phantom-launchers/phantom-boot-monolith`。
-- `platform/server/phantom-admin-console/`：平台管理控制台，独立 npm/Vite 工程，不加入 Maven reactor。
-- `platform/contracts/proto/phantom/v1/`：Java 与各端 SDK 共用的 protobuf 通信契约源文件。
-- `platform/contracts/openapi/`：平台 HTTP OpenAPI 契约。
-- `platform/sdks/web/`：TypeScript Web SDK（`@phantom/sdk-web`）。
-- `consumers/easy-im/bff/`：Easy IM 独立 Spring Boot 4 Maven 工程，提供账号、Redis Session、UserToken 与 Phantom HTTP 代理。
-- `consumers/easy-im/clients/web/`：Easy IM Web 客户端，React + TypeScript + Vite。
-- `docs/platform/`：平台 PRD、架构、运维与验收文档；`docs/consumers/easy-im/`：消费方文档与设计资产。
+- `phantom-platform/server/`：JDK 21 Spring Boot Maven 聚合工程。共享契约位于 `phantom-common` 和 `phantom-service-api`；基础设施 starter 位于 `phantom-infra/*`；业务服务位于 `phantom-services/*`；装配入口位于 `phantom-launchers/phantom-boot-monolith`。
+- `phantom-platform/server/phantom-admin-console/`：平台管理控制台，独立 npm/Vite 工程，不加入 Maven reactor。
+- `phantom-platform/contracts/proto/phantom/v1/`：Java 与各端 SDK 共用的 protobuf 通信契约源文件。
+- `phantom-platform/contracts/openapi/`：平台 HTTP OpenAPI 契约。
+- `phantom-platform/sdks/web/`：TypeScript Web SDK（`@phantom/sdk-web`）。
+- `phantom-im/bff/`：Easy IM 独立 Spring Boot 4 Maven 工程，提供账号、Redis Session、UserToken 与 Phantom HTTP 代理。
+- `phantom-im/clients/web/`：Easy IM Web 客户端，React + TypeScript + Vite。
+- `docs/phantom-platform/`：平台 PRD、架构、运维与验收文档；`docs/phantom-im/`：消费方文档与设计资产。
 - `deploy/local/`：本地 MySQL、Redis 与 RocketMQ 基础设施；`openspec/`：规格驱动变更；`tools/e2e-smoke/`：跨产品黑盒冒烟测试。
 
 ## 构建、测试与开发命令
@@ -27,17 +27,17 @@ docker compose -f deploy/local/docker-compose.yml up -d
 docker compose -f deploy/local/rocketmq/docker-compose.yml up -d
 
 # 平台服务端（端口 28080，WebSocket 路径 /ws）
-cd platform/server && mvn -DskipTests package
+cd phantom-platform/server && mvn -DskipTests package
 java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
 
 # 平台管理控制台（端口 5174）
-cd platform/server/phantom-admin-console && npm install && npm run dev
+cd phantom-platform/server/phantom-admin-console && npm install && npm run dev
 
-# Easy IM BFF（端口 28090，先按 consumers/easy-im/README.md 配置环境变量）
-cd consumers/easy-im/bff && mvn -s .mvn/settings.xml spring-boot:run
+# Easy IM BFF（端口 28090，先按 phantom-im/README.md 配置环境变量）
+cd phantom-im/bff && mvn -s .mvn/settings.xml spring-boot:run
 
 # Easy IM Web UI（端口 5173，当前为未接真实服务的 UI 壳）
-cd consumers/easy-im/clients/web && npm install && npm run dev
+cd phantom-im/clients/web && npm install && npm run dev
 
 # 快速冒烟测试
 cd tools/e2e-smoke && npm install && node smoke.mjs
@@ -67,4 +67,4 @@ cd tools/e2e-smoke && npm install && node smoke.mjs
 
 ## 架构与配置说明
 
-业务服务模块保持独立，通过启动器与自动装配层进行组合。修改端口或客户端端点时，需同步更新平台服务端配置、`consumers/easy-im/bff/`、Easy IM 客户端、Playwright 测试和冒烟测试客户端。
+业务服务模块保持独立，通过启动器与自动装配层进行组合。修改端口或客户端端点时，需同步更新平台服务端配置、`phantom-im/bff/`、Easy IM 客户端、Playwright 测试和冒烟测试客户端。

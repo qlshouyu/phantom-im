@@ -24,7 +24,7 @@ services:
         condition: service_completed_successfully
     networks:
       - rocketmq
-    restart: on-failure
+    restart: unless-stopped
     command: sh mqnamesrv
 
   broker:
@@ -48,7 +48,7 @@ services:
         condition: service_started
     networks:
       - rocketmq
-    restart: on-failure
+    restart: unless-stopped
     command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
 
   # 预先创建消费者订阅的 Topic；Broker 自动建 Topic 只对生产链路生效，
@@ -83,7 +83,7 @@ services:
         condition: service_completed_successfully
     networks:
       - rocketmq
-    restart: on-failure
+    restart: unless-stopped
     command: sh mqproxy
 
   dashboard:
@@ -101,7 +101,7 @@ services:
       - proxy
     networks:
       - rocketmq
-    restart: on-failure
+    restart: unless-stopped
 
 # 使用命名卷：Lima VM 将 ~ 只读挂载，./data 绑定挂载无法写入
 volumes:
