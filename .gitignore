@@ -4,8 +4,15 @@
 .$*.dtmp
 **/.$*.dtmp
 node_modules/
+**/.vite/
+
+# IDE
+**/.idea/
+
 # 构建产物
 **/target/
+**/dist/
+**/coverage/
 **/ffmpeg-tools.zip
 **/src/main/resources/ffmpeg/**/.download/
 
@@ -13,8 +20,5 @@ node_modules/
 **/test-results/
 **/playwright-report/
 
-# Web UI 构建产物
-phantom-im-web-ui/dist/
-
-# Web IM BFF 本地环境变量（可能含敏感凭据）
-phantom-im-web-bff/.env
+# 本地环境变量（可能含敏感凭据）
+**/.env

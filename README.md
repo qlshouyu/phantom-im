@@ -1,42 +1,97 @@
 # Phantom IM
 
-Phantom IM 由平台服务端、Web SDK 和独立的 Web IM 消费方组成。本仓库当前包含：
+Phantom IM 是一个包含 PaaS 平台与消费方产品的 IM 工程：
 
-- `phantom-im-server/`：Phantom 平台单体与各业务模块。
-- `client/packages/phantom-sdk-web/`：Web SDK。
-- `phantom-im-web-bff/`：Web IM 接入方 BFF，独立 Spring Boot 4 Maven 工程。
-- `phantom-im-web-ui/`：独立 React + Vite Web IM。
-- `openspec/`：规格驱动变更。
-- `deploy/local/`：本地 MySQL、Redis 基础设施。
+- `platform/`：Phantom IM PaaS，提供平台服务、通信契约、各端 SDK 和平台管理控制台。
+- `consumers/easy-im/`：基于 Phantom IM PaaS 构建的消费方 IM 产品，包含独立 BFF 和多终端客户端。
 
-## Web IM 本地启动
+## 目录概览
 
-完整步骤、环境变量、数据隔离和故障排查见 [`docs/web-im-consumer.md`](docs/web-im-consumer.md)。
+```text
+platform/
+├── server/                         # Spring Boot / JDK 21 Maven 聚合工程
+│   └── phantom-admin-console/     # 平台管理控制台（独立 npm 工程）
+├── contracts/
+│   ├── proto/phantom/v1/           # Java 与各端 SDK 共用的 protobuf 契约
+│   └── openapi/                    # HTTP OpenAPI 契约
+└── sdks/web/                       # @phantom/sdk-web
 
-最短路径：
+consumers/easy-im/
+├── bff/                            # Easy IM 账号、Session、UserToken 与 HTTP BFF
+└── clients/web/                    # Easy IM Web 客户端
+```
+
+## 当前状态
+
+- Phantom 平台服务和 Web SDK 已具备 M0 链路。
+- `consumers/easy-im/clients/web/` 当前是新 UI 壳，使用本地模拟数据。
+- Easy IM 的 BFF、SDK、WebSocket 和真实业务数据接入尚待后续实现。
+- 原 `phantom-im-web-ui/` 已移除，不再作为 Easy IM 客户端维护。
+
+## 本地启动
+
+### 1. 基础设施
 
 ```bash
-# 1. 基础设施
 docker compose -f deploy/local/docker-compose.yml up -d
-docker compose -f docs/third/rocketmq/docker-compose.yml up -d
+docker compose -f deploy/local/rocketmq/docker-compose.yml up -d
+```
 
-# 2. Phantom 单体（另开终端）
-cd phantom-im-server
+### 2. Phantom 平台单体
+
+```bash
+cd platform/server
 mvn -DskipTests package
 java -jar phantom-launchers/phantom-boot-monolith/target/phantom-monolith.jar
+```
 
-# 3. BFF（另开终端；本地示例值不得用于生产）
-cd phantom-im-web-bff
-export PHANTOM_WEB_IM_APP_ID=app_demo
-export PHANTOM_WEB_IM_APP_SECRET=phantom_demo_secret_please_change_0123456789
-export PHANTOM_WEB_IM_USER_TOKEN_SECRET=phantom_demo_secret_please_change_0123456789
-export WEB_IM_TEST_MODE=true
+服务端口为 `28080`，WebSocket 路径为 `/ws`。
+
+### 3. Easy IM BFF
+
+```bash
+cd consumers/easy-im/bff
+cp .env.example .env
+set -a; source .env; set +a
 mvn -s .mvn/settings.xml spring-boot:run
+```
 
-# 4. Web UI（另开终端）
-cd phantom-im-web-ui
-npm install --registry=https://registry.npmjs.org
+BFF 默认端口为 `28090`。完整配置见 [`consumers/easy-im/README.md`](consumers/easy-im/README.md)。
+
+### 4. Easy IM Web UI
+
+```bash
+cd consumers/easy-im/clients/web
+npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173`。生产构建后，也可由 BFF 在 `http://localhost:28090` 托管 `phantom-im-web-ui/dist`。
+开发地址为 `http://localhost:5173`。当前 UI 仍是视觉壳，后续接入 BFF 与 `@phantom/sdk-web`。
+
+## 平台管理控制台
+
+```bash
+cd platform/server/phantom-admin-console
+npm install
+npm run dev
+```
+
+管理控制台默认端口为 `5174`，通过 Vite 代理访问 Phantom OpenAPI。
+
+## 验证
+
+```bash
+# 平台服务端
+cd platform/server && mvn test
+
+# Web SDK
+cd platform/sdks/web && npm test && npm run typecheck
+
+# Easy IM BFF
+cd consumers/easy-im/bff && mvn -s .mvn/settings.xml test
+
+# 快速冒烟（需启动平台服务与中间件）
+cd tools/e2e-smoke && node smoke.mjs
+```
+
+规格与设计分别位于 `openspec/` 和 `docs/`。

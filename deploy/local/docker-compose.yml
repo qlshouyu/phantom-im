@@ -1,5 +1,5 @@
 # Phantom IM 本地联调栈（M0）：MySQL + Redis
-# RocketMQ 在 docs/third/rocketmq/docker-compose.yml 单独启动（已就绪）
+# RocketMQ 在 deploy/local/rocketmq/docker-compose.yml 单独启动（已就绪）
 # 用法：docker compose -f deploy/local/docker-compose.yml up -d
 services:
   mysql:

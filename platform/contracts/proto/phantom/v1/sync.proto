@@ -1,0 +1,241 @@
+// Phantom IM 通讯协议 - 双 Timeline 同步事件流、已读、摘要比对
+// 设计文档: docs/platform/architecture/2026-08-07-im-protocol-design.md 第 4 节
+syntax = "proto3";
+
+package phantom.v1;
+
+import "phantom/v1/common.proto";
+import "phantom/v1/message.proto";
+
+option java_package = "im.phantom.proto.v1";
+option java_multiple_files = true;
+option go_package = "phantom.im/proto/phantom/v1;phantomv1";
+
+// ---- 同步事件类型（统一进入用户同步 Timeline，按 user_seq 严格排序）----
+
+// 新消息事件：默认内联完整消息体；超大内容仅带引用，客户端经漫游接口回捞
+message NewMessageEvent {
+  Msg msg = 1;             // 内联消息体；为空时按下方引用回捞
+  string conv_id = 2;
+  int64 conv_seq = 3;
+  string msg_id = 4;
+  bool is_request = 5;      // 非好友首条消息进入消息请求分区（SEC-14）
+}
+
+message RecallEvent {
+  string msg_id = 1;
+  string conv_id = 2;
+  string operator_id = 3;
+}
+
+// 本人任一端已读位置变更（MD-07/08），其余端未读数随之刷新
+message ReadPositionEvent {
+  string conv_id = 1;
+  int64 read_conv_seq = 2;
+}
+
+// 对端已读回执：受应用级开关 AuthResp.read_receipt.enabled 控制，关闭时不生成。
+// 单聊：对方已读位置；群聊：逐成员明细（服务端按 (conv_id, reader_id) 5 秒窗口
+// 合并，只发最新位置），客户端维护"成员→已读位置"集合，据此计算每条消息的
+// 已读/未读成员列表；全量快照经 HTTP GET /conversations/{id}/read-positions 拉取
+message ReadReceiptEvent {
+  string conv_id = 1;
+  int64 read_conv_seq = 2;   // 该 reader 的已读位置
+  string reader_id = 3;      // 单聊与群聊均填写
+  uint32 read_count = 4;     // 群聊：聚合已读人数（气泡角标快捷值）
+}
+
+// 会话状态变更（置顶/免打扰/删除/标记已读，MD-09/10、CV-18）
+message ConvStateEvent {
+  string conv_id = 1;
+  ConvStateField field = 2;
+  bool bool_value = 3;       // pinned / muted / deleted 的目标值
+  int64 op_time = 4;         // 操作时间（置顶排序依据 CV-05）
+
+  enum ConvStateField {
+    CONV_STATE_FIELD_UNSPECIFIED = 0;
+    CONV_STATE_FIELD_PINNED = 1;
+    CONV_STATE_FIELD_MUTED = 2;
+    CONV_STATE_FIELD_DELETED = 3;
+    CONV_STATE_FIELD_MARKED_READ = 4;
+    CONV_STATE_FIELD_READ_ONLY = 5;
+  }
+}
+
+// 草稿变更（MD-11）；edited_at 用于"最后编辑获胜"冲突仲裁（CV/07 边界）
+message DraftEvent {
+  string conv_id = 1;
+  string draft = 2;       // 空串 = 清空草稿
+  int64 edited_at = 3;
+}
+
+// 关系链变更（REL 系列）
+message RelationEvent {
+  RelationEventType type = 1;
+  string peer_id = 2;
+  UserLite peer = 3;
+  string request_id = 4;             // 好友申请 ID
+  string verification_message = 5;   // 验证消息，最多 30 字
+  int64 created_at = 6;
+  repeated string group_ids = 7;     // 好友所属分组（FRIEND_SETTING_CHANGED）
+  bool pinned = 8;                   // 特别关心（FRIEND_SETTING_CHANGED）
+  string remark = 9;                 // 好友备注（仅本人可见）
+  string group_id = 10;              // 分组事件目标
+  string group_name = 11;            // 分组事件新名称
+  bool group_deleted = 12;           // 分组是否已删除
+
+  enum RelationEventType {
+    RELATION_EVENT_TYPE_UNSPECIFIED = 0;
+    RELATION_EVENT_TYPE_APPLY_RECEIVED = 1;   // 收到好友申请（REL-07 角标）
+    RELATION_EVENT_TYPE_APPLY_ACCEPTED = 2;   // 申请被通过，成为好友
+    RELATION_EVENT_TYPE_APPLY_REJECTED = 3;
+    RELATION_EVENT_TYPE_FRIEND_DELETED = 4;   // 本人他端删除好友
+    RELATION_EVENT_TYPE_BLACKLIST_ADDED = 5;  // 本人他端拉黑
+    RELATION_EVENT_TYPE_BLACKLIST_REMOVED = 6;
+    RELATION_EVENT_TYPE_APPLY_IGNORED = 7;
+    RELATION_EVENT_TYPE_FRIEND_SETTING_CHANGED = 8;
+    RELATION_EVENT_TYPE_GROUP_CHANGED = 9;
+    RELATION_EVENT_TYPE_APPLY_SENT = 10;
+  }
+}
+
+// 群事件（GC 系列：成员进出/权限/禁言/公告/资料/解散）
+message GroupEvent {
+  GroupEventType type = 1;
+  string group_id = 2;
+  repeated string target_user_ids = 3;   // 涉及的成员
+  string operator_id = 4;
+  map<string, string> params = 5;        // 如禁言时长、新群名、公告内容摘要
+
+  enum GroupEventType {
+    GROUP_EVENT_TYPE_UNSPECIFIED = 0;
+    GROUP_EVENT_TYPE_MEMBER_JOINED = 1;
+    GROUP_EVENT_TYPE_MEMBER_LEFT = 2;
+    GROUP_EVENT_TYPE_MEMBER_KICKED = 3;
+    GROUP_EVENT_TYPE_ROLE_CHANGED = 4;      // 管理员任命/取消/群主转让
+    GROUP_EVENT_TYPE_MUTE_CHANGED = 5;      // 成员禁言/解除、全员禁言开关
+    GROUP_EVENT_TYPE_ANNOUNCEMENT = 6;
+    GROUP_EVENT_TYPE_PROFILE_CHANGED = 7;   // 群名/头像
+    GROUP_EVENT_TYPE_DISSOLVED = 8;
+    GROUP_EVENT_TYPE_NICKNAME_CHANGED = 9;  // 群名片变更，消息气泡与成员列表优先展示
+  }
+}
+
+// 资料/设置变更（本人资料、隐私设置、好友备注，AC-09/11/12、REL-10）
+message ProfileEvent {
+  ProfileEventType type = 1;
+  string target_id = 2;              // 备注变更时为好友 id
+  map<string, string> changed = 3;   // 变更字段名 → 新值
+
+  enum ProfileEventType {
+    PROFILE_EVENT_TYPE_UNSPECIFIED = 0;
+    PROFILE_EVENT_TYPE_MY_PROFILE = 1;
+    PROFILE_EVENT_TYPE_MY_SETTINGS = 2;
+    PROFILE_EVENT_TYPE_FRIEND_REMARK = 3;
+  }
+}
+
+// 受限投递提示（DC-16/18）：客户端据此在会话内插入系统提示气泡
+message RestrictedDeliveryEvent {
+  string conv_id = 1;
+  string msg_id = 2;
+  string template_id = 3;  // 如 "delivery.maybe_deleted" / "delivery.maybe_blocked"
+}
+
+// 举报处理结果（SEC-01~SEC-05）：只同步状态，不暴露内部审核规则和处置细节。
+message ReportEvent {
+  string report_id = 1;
+  string target_type = 2;
+  string target_id = 3;
+  string status = 4;          // RESOLVED / REJECTED
+  string template_id = 5;     // 如 "report.resolved"
+  int64 updated_at = 6;
+}
+
+message SyncEvent {
+  int64 user_seq = 1;
+  int64 event_time = 2;
+  oneof event {
+    NewMessageEvent new_message = 10;
+    RecallEvent recall = 11;
+    ReadPositionEvent read_position = 12;
+    ReadReceiptEvent read_receipt = 13;
+    ConvStateEvent conv_state = 14;
+    DraftEvent draft = 15;
+    RelationEvent relation = 16;
+    GroupEvent group = 17;
+    ProfileEvent profile = 18;
+    RestrictedDeliveryEvent restricted_delivery = 19;
+    MsgStatusEvent msg_status = 20;
+    ReportEvent report = 21;
+  }
+}
+
+// TOPIC_SYNC_EVENT 的 outbox 外包装；用户 ID 与事件 ID 用于路由和消费幂等。
+message SyncEventEnvelope {
+  string user_id = 1;
+  string event_id = 2;
+  SyncEvent event = 3;
+}
+
+// 通用同步事件在线推送；离线端仍通过 SyncReq 按 user_seq 补齐。
+message SyncEventPush {
+  SyncEvent event = 1;
+}
+
+// ---- 增量同步（MD-05，设计文档 4.3/4.4）----
+
+message SyncReq {
+  int64 since_user_seq = 1;
+  uint32 limit = 2;         // 建议 200
+}
+
+message SyncResp {
+  repeated SyncEvent events = 1;  // 服务端已做事件合并（撤回优先、状态取终态）
+  int64 max_user_seq = 2;
+  bool has_more = 3;
+  // true = since_user_seq 超出同步 Timeline 保留窗口（30 天），
+  // 客户端须放弃事件回放，改走 HTTP GET /conversations 全量重建
+  bool full_resync = 4;
+}
+
+// ---- 已读上报（位置式，MD-07/08；只允许前进防状态倒退 MSG-09）----
+
+message MarkReadReq {
+  string conv_id = 1;
+  int64 read_conv_seq = 2;
+}
+
+message MarkReadResp {
+  string conv_id = 1;
+  int64 read_conv_seq = 2;  // 服务端生效值（可能大于请求值）
+}
+
+// 对端已读的实时推送（在线设备；离线经 SyncEvent.read_receipt 补齐）
+message ReadReceiptPush {
+  ReadReceiptEvent receipt = 1;
+  int64 user_seq = 2;
+}
+
+// ---- 状态防漂移兜底（07 边界"状态同步事件丢失兜底"，设计文档 4.7）----
+
+message ConvDigestReq {
+  // 本地全部会话状态（置顶/免打扰/未读/read_conv_seq）按约定规则计算的哈希
+  string digest = 1;
+}
+
+message ConvDigestResp {
+  bool match = 1;
+  repeated ConvSnapshot diff = 2;  // 不一致时的差异项，以服务端为准覆盖本地
+
+  message ConvSnapshot {
+    string conv_id = 1;
+    bool pinned = 2;
+    int64 pinned_at = 3;
+    bool muted = 4;
+    bool deleted = 5;
+    int64 read_conv_seq = 6;
+    int64 max_conv_seq = 7;
+    uint32 unread_count = 8;
+  }
+}

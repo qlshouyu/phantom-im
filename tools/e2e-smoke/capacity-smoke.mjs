@@ -172,4 +172,4 @@ ws.close();
 if (group.member_count !== MEMBERS || fanoutCount !== MEMBERS) {
   throw new Error(`容量断言失败 memberCount=${group.member_count} fanout=${fanoutCount}`);
 }
-console.log("容量测试通过；结果可写入 docs/mvp-acceptance-evidence.md");
+console.log("容量测试通过；结果可写入 docs/platform/acceptance/mvp-acceptance-evidence.md");
