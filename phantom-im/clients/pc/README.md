@@ -119,6 +119,20 @@ WEB_IM_ALLOWED_ORIGINS=https://im.example.com
 
 安装包不包含 BFF AppSecret、Phantom AppSecret 或服务端环境变量。
 
+## 诊断日志
+
+客户端启动后会向当前用户的临时目录追加按日期命名的诊断日志：
+
+- macOS：`$TMPDIR/phantom-im-logs/phantom-im-yyyyMMdd.log`
+- Windows：`%TEMP%\phantom-im-logs\phantom-im-yyyyMMdd.log`
+- Linux：`${TMPDIR:-/tmp}/phantom-im-logs/phantom-im-yyyyMMdd.log`
+
+登录页底部提供“打开诊断日志目录”入口。客户端跨天运行时会自动切换为当天日期文件；同一天日志超过 5 MiB 时轮转为 `phantom-im-yyyyMMdd.log.1`，避免无限增长。
+
+日志用于排查客户端启动、BFF 地址、本地网关、API 请求与响应状态、BFF `request_id`、网络超时、WebView 未捕获异常和未处理 Promise。日志不会记录密码、Cookie、Authorization Token、请求正文或消息正文；搜索类 URL 查询参数也不会写入。
+
+用户反馈登录或连接问题时，可以压缩整个 `phantom-im-logs` 目录发送。日志包含设备时间、客户端版本、操作系统、BFF 来源和请求结果，不包含服务器密钥。
+
 ## 安全边界
 
 - 本地网关只绑定 `127.0.0.1`，只转发 `/api/*`，拒绝点路径、OpenAPI 管理路径、非法 Host 和非应用来源的状态变更请求。

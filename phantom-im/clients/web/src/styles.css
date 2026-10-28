@@ -5327,6 +5327,24 @@ textarea,
   color: #126e48;
 }
 
+.auth-diagnostics-link {
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.auth-diagnostics-link button {
+  padding: 2px 4px;
+  border: 0;
+  color: #a3aca7;
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.auth-diagnostics-link button:hover {
+  color: #208b5e;
+}
+
 @media (max-height: 760px) and (min-width: 961px) {
   .auth-showcase {
     padding-top: 28px;

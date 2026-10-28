@@ -9,6 +9,7 @@ import type {
   RuntimeConfig,
   SessionAccount,
 } from './types'
+import { writeDiagnosticLog } from '../platform/diagnostics'
 
 export class BffApiError extends Error {
   readonly code: number
@@ -224,6 +225,7 @@ export class BffClient {
       })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') throw error
+      writeDiagnosticLog('error', `BFF 网络失败 method=${method} path=${diagnosticPath(path)} code=9001`)
       throw new BffApiError({
         message: '无法连接 Easy IM BFF',
         network: true,
@@ -240,6 +242,10 @@ export class BffClient {
       } catch {
         const requestId = headerRequestId
         this.requestId = requestId
+        writeDiagnosticLog(
+          'error',
+          `BFF 响应格式错误 method=${method} path=${diagnosticPath(path)} status=${response.status} request_id=${requestId ?? '-'}`,
+        )
         throw new BffApiError({
           message: 'BFF 返回了无效 JSON',
           status: response.status,
@@ -255,6 +261,10 @@ export class BffClient {
     const code = Number(payload?.code ?? (response.ok ? 0 : response.status))
     const unauthorized = response.status === 401 || code === 2003
     if (!response.ok || code !== 0) {
+      writeDiagnosticLog(
+        response.status >= 500 ? 'error' : 'warn',
+        `BFF 请求失败 method=${method} path=${diagnosticPath(path)} status=${response.status} code=${code} request_id=${requestId ?? '-'} message=${payload?.message ?? '-'}`,
+      )
       if (unauthorized && options.expireSessionOn401) this.onSessionInvalid?.()
       throw new BffApiError({
         message: payload?.message || `BFF 请求失败（HTTP ${response.status}）`,
@@ -275,6 +285,10 @@ export class BffClient {
     }
     return payload.data
   }
+}
+
+function diagnosticPath(path: string): string {
+  return path.split('?', 1)[0] || '/'
 }
 
 function mapSessionAccount(raw: RawSessionAccount): SessionAccount {

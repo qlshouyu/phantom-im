@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::{Request, State};
@@ -26,6 +26,7 @@ use url::Url;
 
 use crate::config::GatewayConfig;
 use crate::cookie::rewrite_set_cookie;
+use crate::diagnostics;
 
 const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
 const HOP_BY_HOP_HEADERS: &[&str] = &[
@@ -170,7 +171,27 @@ pub async fn start(
 }
 
 async fn proxy_api(State(state): State<GatewayState>, request: Request) -> Response {
+    let method = request.method().as_str().to_owned();
+    let path = request.uri().path().to_owned();
+    let origin = request
+        .headers()
+        .get(ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-");
+    let incoming_request_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-");
+    diagnostics::info(&format!(
+        "网关收到请求 method={method} path={path} origin={origin} request_id={incoming_request_id}"
+    ));
+
     if let Err(response) = validate_request(&state, &request) {
+        diagnostics::warn(&format!(
+            "网关拒绝请求 method={method} path={path} status={}",
+            response.status()
+        ));
         return response;
     }
 
@@ -185,6 +206,10 @@ async fn proxy_api(State(state): State<GatewayState>, request: Request) -> Respo
         Ok(method) => method,
         Err(_) => return gateway_error(StatusCode::BAD_REQUEST, 1001, "不支持的 HTTP 方法"),
     };
+    diagnostics::info(&format!(
+        "转发 BFF 请求 method={method} path={path} bff_origin={}",
+        state.config.bff_origin()
+    ));
 
     let mut builder = state.client.request(upstream_method, upstream_url);
     for name in FORWARDED_REQUEST_HEADERS {
@@ -204,17 +229,64 @@ async fn proxy_api(State(state): State<GatewayState>, request: Request) -> Respo
         .map_err(std::io::Error::other);
     builder = builder.body(reqwest::Body::wrap_stream(body_stream));
 
+    let started = Instant::now();
     let upstream = match builder.send().await {
         Ok(response) => response,
         Err(error) if error.is_timeout() => {
+            diagnostics::error(&format!(
+                "BFF 请求超时 method={method} path={path} bff_origin={} elapsed_ms={}",
+                state.config.bff_origin(),
+                started.elapsed().as_millis()
+            ));
             return gateway_error(StatusCode::GATEWAY_TIMEOUT, 50301, "BFF 请求超时");
         }
-        Err(_) => return gateway_error(StatusCode::BAD_GATEWAY, 50302, "BFF 服务不可达"),
+        Err(error) => {
+            diagnostics::error(&format!(
+                "BFF 请求失败 method={method} path={path} bff_origin={} elapsed_ms={} error={error}",
+                state.config.bff_origin(),
+                started.elapsed().as_millis()
+            ));
+            return gateway_error(StatusCode::BAD_GATEWAY, 50302, "BFF 服务不可达");
+        }
     };
 
     let status = upstream.status();
     let headers = upstream.headers().clone();
-    let mut response = Response::new(Body::from_stream(upstream.bytes_stream()));
+    let request_id = headers
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-")
+        .to_owned();
+    let (body, error_summary) = if status.is_success() || status.is_redirection() {
+        (Body::from_stream(upstream.bytes_stream()), None)
+    } else {
+        match upstream.bytes().await {
+            Ok(bytes) => {
+                let summary = safe_error_summary(&bytes);
+                (Body::from(bytes), summary)
+            }
+            Err(error) => {
+                diagnostics::error(&format!(
+                    "读取 BFF 错误响应失败 method={method} path={path} status={status} request_id={request_id} error={error}"
+                ));
+                return gateway_error(StatusCode::BAD_GATEWAY, 50302, "BFF 响应读取失败");
+            }
+        }
+    };
+    let elapsed_ms = started.elapsed().as_millis();
+    let summary = error_summary.as_deref().unwrap_or("-");
+    let log_message = format!(
+        "BFF 响应 method={method} path={path} status={status} request_id={request_id} elapsed_ms={elapsed_ms} error={summary}"
+    );
+    if status.is_server_error() {
+        diagnostics::error(&log_message);
+    } else if status.is_client_error() {
+        diagnostics::warn(&log_message);
+    } else {
+        diagnostics::info(&log_message);
+    }
+
+    let mut response = Response::new(body);
     *response.status_mut() = status;
     let output_headers = response.headers_mut();
     for (name, value) in &headers {
@@ -440,6 +512,9 @@ fn static_response(
 }
 
 fn gateway_error(status: StatusCode, code: i32, message: &str) -> Response {
+    diagnostics::warn(&format!(
+        "客户端网关错误 status={status} code={code} message={message}"
+    ));
     let body = json!({
         "code": code,
         "message": message,
@@ -450,6 +525,23 @@ fn gateway_error(status: StatusCode, code: i32, message: &str) -> Response {
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+fn safe_error_summary(bytes: &[u8]) -> Option<String> {
+    let payload: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let code = payload.get("code").map(|value| value.to_string());
+    let message = payload
+        .get("message")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    match (code, message) {
+        (None, None) => None,
+        (code, message) => Some(format!(
+            "code={} message={}",
+            code.as_deref().unwrap_or("-"),
+            message.as_deref().unwrap_or("-")
+        )),
+    }
 }
 
 fn is_hop_by_hop(name: &HeaderName) -> bool {
@@ -479,5 +571,17 @@ mod tests {
         assert!(safe_relative_path("settings/profile"));
         assert!(!safe_relative_path("../secret"));
         assert!(!safe_relative_path("assets\\..\\secret"));
+    }
+
+    #[test]
+    fn error_summary_keeps_only_code_and_message() {
+        let summary = safe_error_summary(
+            r#"{"code":1001,"message":"跨站请求被拒绝","data":{"password":"must-not-log"}}"#
+                .as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(summary, "code=1001 message=跨站请求被拒绝");
+        assert!(!summary.contains("must-not-log"));
     }
 }

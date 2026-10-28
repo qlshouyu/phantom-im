@@ -6,6 +6,8 @@ import {
 import { BffApiError } from '../api/bff'
 import type { LoginInput, RegistrationInput } from '../api/types'
 import { Icon, PhantomMark, type IconName } from '../icons'
+import { desktopPlatform } from '../platform'
+import { openDiagnosticLogDirectory } from '../platform/diagnostics'
 
 type AuthMode = 'login' | 'register'
 
@@ -428,6 +430,13 @@ export default function AuthScreen({ onLogin, onRegister }: AuthScreenProps) {
               {isLogin ? '立即注册' : '返回登录'}
             </button>
           </p>
+          {desktopPlatform.isTauri && (
+            <p className="auth-diagnostics-link">
+              <button type="button" onClick={() => void openDiagnosticLogDirectory()}>
+                打开诊断日志目录
+              </button>
+            </p>
+          )}
         </div>
       </section>
     </main>
