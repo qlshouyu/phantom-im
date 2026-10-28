@@ -27,7 +27,7 @@ case "$format" in
     package_name="$(dpkg-deb -f "$archive" Package)"
     sudo apt-get install -y "$archive"
     installed_package=true
-    executable="$(dpkg -L "$package_name" | awk '/^\/usr\/bin\// { print; exit }')"
+    executable="$(dpkg -L "$package_name" | awk '/^\/usr\/bin\// { if (!found) { print; found = 1 } }')"
     [[ -n "$executable" ]] || { echo "No /usr/bin launcher found for $package_name" >&2; exit 1; }
     setsid env WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 "$executable" >"$log_file" 2>&1 &
     ;;

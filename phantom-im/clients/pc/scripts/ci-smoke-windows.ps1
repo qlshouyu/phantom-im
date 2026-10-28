@@ -86,7 +86,8 @@ function Uninstall-Installer([string]$Installer) {
     }
 }
 
-$installer = Find-Installer $Format
+$installerExtension = if ($Format -eq "nsis") { "exe" } else { "msi" }
+$installer = Find-Installer $installerExtension
 try {
     if ($Format -eq "nsis") {
         $install = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
