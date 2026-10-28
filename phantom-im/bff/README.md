@@ -41,6 +41,7 @@ mvn -s .mvn/settings.xml spring-boot:run
 - 代理会覆盖可信的 `X-App-Id`、`X-User-Id`，并转发 `Authorization`、`Content-Type`、`User-Agent`、`X-Device-Id`。
 - `401`、字段错误、`request_id` 和上游中断均使用统一错误语义。
 - 生产构建由 BFF 静态托管，浏览器继续使用同源 `/api` 与 `/api/phantom`。
+- Phantom IM PC 由 Rust 回环网关托管内置 Web；网关把 `/api/*` 转发到 BFF，并把 `Origin`/`Referer` 改写为 BFF 来源。配置 `WEB_IM_ALLOWED_ORIGINS` 时必须包含实际 BFF 来源。
 
 ## 测试
 

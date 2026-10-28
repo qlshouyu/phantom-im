@@ -1,6 +1,6 @@
 # Easy IM
 
-Easy IM 是 Phantom IM PaaS 的消费方产品，包含独立 BFF 与 React Web 客户端。
+Easy IM 是 Phantom IM PaaS 的消费方产品，包含独立 BFF、React Web 客户端与 Tauri 2 PC 客户端。
 
 ## 当前状态
 
@@ -9,6 +9,7 @@ Easy IM 是 Phantom IM PaaS 的消费方产品，包含独立 BFF 与 React Web 
 - 消息、通讯录、好友申请、群组、资料、设备、通知、搜索和诊断均使用真实 SDK/PaaS 数据。
 - 收藏夹、云空间、群文件、群相册和语音/视频通话没有公开 PaaS 契约，界面明确显示暂未开放。
 - 本地真实链路由 Playwright 双/多用户上下文、BFF HTTP 冒烟和现有 `tools/e2e-smoke` 覆盖。
+- Phantom IM PC 复用 Web 生产构建，通过 Rust 回环同源网关连接 BFF；macOS 主链路已验收，Windows/Linux 需原生环境验收。
 
 完整能力状态见 [`docs/phantom-im/integration-matrix.md`](../docs/phantom-im/integration-matrix.md)，验收记录见 [`docs/phantom-im/acceptance-report.md`](../docs/phantom-im/acceptance-report.md)。
 
@@ -18,7 +19,8 @@ Easy IM 是 Phantom IM PaaS 的消费方产品，包含独立 BFF 与 React Web 
 phantom-im/
 ├── bff/                    # 独立 Spring Boot 账号服务与 HTTP BFF
 ├── clients/
-│   └── web/                # React + Vite Web 客户端
+│   ├── web/                # React + Vite Web 客户端
+│   └── pc/                 # Tauri 2 + Rust Phantom IM 桌面客户端
 └── README.md
 ```
 
@@ -59,6 +61,16 @@ npm run dev
 
 访问 `http://localhost:5173`。Vite 将 `/api` 代理到 `http://127.0.0.1:28090`。
 
+启动 PC 客户端：
+
+```bash
+cd phantom-im/clients/pc
+npm install
+npm run dev
+```
+
+PC 开发服务器使用 `http://127.0.0.1:5273`。生产构建会先执行 Web 构建，再把 `dist` 复制到 Tauri 资源目录。完整说明见 [`clients/pc/README.md`](clients/pc/README.md)。
+
 全部服务启动后可执行：
 
 ```bash
@@ -72,6 +84,7 @@ node tools/easy-im-preflight.mjs
 | Phantom 单体 | `http://127.0.0.1:28080`，WebSocket `ws://127.0.0.1:28080/ws` |
 | BFF | `http://127.0.0.1:28090` |
 | Web 开发服务器 | `http://127.0.0.1:5173` |
+| PC 开发服务器 | `http://127.0.0.1:5273` |
 | MySQL | `127.0.0.1:3306`，业务库 `phantom_im`，BFF 库 `phantom_web_im` |
 | Redis | `127.0.0.1:6379`，BFF Session DB 1 |
 | RocketMQ | Namesrv `127.0.0.1:9876`，gRPC proxy `127.0.0.1:8081` |
@@ -94,6 +107,11 @@ npm run test:contract
 
 # Web 真实全链路
 npm run test:e2e -- --timeout=240000
+
+# PC 构建与网关测试
+cd phantom-im/clients/pc
+npm test
+npm run tauri -- build --bundles app
 
 # 生产式同源（BFF 已使用最新 dist）
 E2E_PROD=true E2E_BASE_URL=http://127.0.0.1:28090 \

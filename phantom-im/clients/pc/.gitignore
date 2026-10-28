@@ -1,0 +1,3 @@
+node_modules/
+src-tauri/resources/web/
+src-tauri/gen/

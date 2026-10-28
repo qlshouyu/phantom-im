@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessage as SdkMessage } from '@phantom/sdk-web'
 import {
   mapChatMessage,
@@ -11,8 +11,12 @@ import {
 
 const now = new Date('2026-10-27T10:24:00+08:00').getTime()
 
+afterEach(() => vi.useRealTimers())
+
 describe('领域映射', () => {
   it('完整映射会话快照字段并保持置顶排序所需时间', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
     const conversation = mapConversation({
       conv_id: 'gr_1',
       conv_type: 'GROUP',

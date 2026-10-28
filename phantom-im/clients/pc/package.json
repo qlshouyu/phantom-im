@@ -1,0 +1,19 @@
+{
+  "name": "@phantom/client-pc",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:web": "npm --prefix ../web run dev -- --port 5273",
+    "build:web": "node scripts/build-web.mjs",
+    "test:build": "node --test scripts/build-web.test.mjs",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "npm run test:build && cargo check --manifest-path src-tauri/Cargo.toml",
+    "test": "npm run test:build && cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

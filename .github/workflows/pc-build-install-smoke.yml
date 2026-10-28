@@ -1,0 +1,228 @@
+name: Phantom IM PC x64
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/pc-build-install-smoke.yml"
+      - "phantom-im/clients/pc/**"
+      - "phantom-im/clients/web/**"
+      - "phantom-platform/sdks/web/**"
+      - "tools/easy-im-contract-check.mjs"
+  push:
+    branches: ["master"]
+    paths:
+      - ".github/workflows/pc-build-install-smoke.yml"
+      - "phantom-im/clients/pc/**"
+      - "phantom-im/clients/web/**"
+      - "phantom-platform/sdks/web/**"
+      - "tools/easy-im-contract-check.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phantom-im-pc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            artifact: phantom-im-pc-windows-x64
+          - name: Linux x64
+            os: ubuntu-latest
+            artifact: phantom-im-pc-linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify x64 Windows runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw "Expected AMD64 runner, got $env:PROCESSOR_ARCHITECTURE"
+          }
+
+      - name: Verify x64 Linux runner
+        if: runner.os == 'Linux'
+        shell: bash
+        run: test "$(uname -m)" = "x86_64"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            phantom-im/clients/web/package-lock.json
+            phantom-im/clients/pc/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "phantom-im/clients/pc/src-tauri -> target"
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install Web dependencies
+        working-directory: phantom-im/clients/web
+        run: npm ci
+
+      - name: Install PC dependencies
+        working-directory: phantom-im/clients/pc
+        run: npm ci
+
+      - name: Test Web
+        working-directory: phantom-im/clients/web
+        run: |
+          npm test
+          npm run typecheck
+          npm run test:contract
+
+      - name: Test PC
+        working-directory: phantom-im/clients/pc
+        run: npm test
+
+      - name: Build Windows x64 installers
+        if: runner.os == 'Windows'
+        working-directory: phantom-im/clients/pc
+        shell: pwsh
+        run: npm run tauri -- build --bundles nsis,msi
+
+      - name: Build Linux x64 installers
+        if: runner.os == 'Linux'
+        working-directory: phantom-im/clients/pc
+        shell: bash
+        run: npm run tauri -- build --bundles appimage,deb
+
+      - name: Verify bundled Web resources
+        shell: bash
+        run: |
+          test -f phantom-im/clients/pc/src-tauri/resources/web/index.html
+          test -n "$(find phantom-im/clients/pc/src-tauri/resources/web/assets -name '*.js' -print -quit)"
+          test -n "$(find phantom-im/clients/pc/src-tauri/resources/web/assets -name '*.css' -print -quit)"
+
+      - name: Collect Windows installers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bundle = "phantom-im/clients/pc/src-tauri/target/release/bundle"
+          $target = "ci-artifacts/${{ matrix.artifact }}"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item "$bundle/nsis/*.exe" $target
+          Copy-Item "$bundle/msi/*.msi" $target
+          $files = Get-ChildItem $target -File
+          if (-not $files) { throw "No Windows installers found" }
+          $files | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content "$target/SHA256SUMS.txt"
+
+      - name: Collect Linux installers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bundle="phantom-im/clients/pc/src-tauri/target/release/bundle"
+          target="ci-artifacts/${{ matrix.artifact }}"
+          mkdir -p "$target"
+          find "$bundle/appimage" -maxdepth 1 -name '*.AppImage' -exec cp {} "$target/" \;
+          find "$bundle/deb" -maxdepth 1 -name '*.deb' -exec cp {} "$target/" \;
+          test -n "$(find "$target" -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$(find "$target" -maxdepth 1 -name '*.deb' -print -quit)"
+          (cd "$target" && sha256sum *.AppImage *.deb > SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ci-artifacts/${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Install and start ${{ matrix.name }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            artifact: phantom-im-pc-windows-x64
+          - name: Linux x64
+            os: ubuntu-latest
+            artifact: phantom-im-pc-linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}
+
+      - name: Install and start NSIS package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./phantom-im/clients/pc/scripts/ci-smoke-windows.ps1 `
+            -Format nsis `
+            -ArtifactRoot "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.artifact }}"
+
+      - name: Install and start MSI package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./phantom-im/clients/pc/scripts/ci-smoke-windows.ps1 `
+            -Format msi `
+            -ArtifactRoot "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.artifact }}"
+
+      - name: Install Linux runtime and smoke dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            dbus-x11 \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            lsof \
+            xvfb
+
+      - name: Install and start DEB package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          xvfb-run -a dbus-run-session -- \
+            bash phantom-im/clients/pc/scripts/ci-smoke-linux.sh \
+            deb "$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact }}"
+
+      - name: Run and start AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          xvfb-run -a dbus-run-session -- \
+            bash phantom-im/clients/pc/scripts/ci-smoke-linux.sh \
+            appimage "$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact }}"

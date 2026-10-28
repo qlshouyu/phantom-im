@@ -18,15 +18,17 @@ phantom-platform/
 
 phantom-im/
 ├── bff/                            # Easy IM 账号、Session、UserToken 与 HTTP BFF
-└── clients/web/                    # Easy IM Web 客户端
+└── clients/
+    ├── web/                        # Easy IM Web 客户端
+    └── pc/                         # Phantom IM Tauri 2 桌面客户端
 ```
 
 ## 当前状态
 
-- Phantom 平台服务和 Web SDK 已具备 M0 链路。
-- `phantom-im/clients/web/` 当前是新 UI 壳，使用本地模拟数据。
-- Easy IM 的 BFF、SDK、WebSocket 和真实业务数据接入尚待后续实现。
-- 原 `phantom-im-web-ui/` 已移除，不再作为 Easy IM 客户端维护。
+- Phantom 平台服务、Web SDK、Easy IM BFF 与 React Web 客户端已接入真实 IM 链路。
+- `phantom-im/clients/web/` 使用 BFF、Web SDK 和 Phantom 真实业务数据。
+- `phantom-im/clients/pc/` 提供 Tauri 2 桌面客户端，构建时复用 Web 生产产物并内置到安装包。
+- macOS 已完成桌面主链路验收；Windows、Linux 构建配置已就绪，仍需对应原生环境验证。
 
 ## 本地启动
 
@@ -66,7 +68,24 @@ npm install
 npm run dev
 ```
 
-开发地址为 `http://localhost:5173`。当前 UI 仍是视觉壳，后续接入 BFF 与 `@phantom/sdk-web`。
+开发地址为 `http://localhost:5173`，通过 Vite 代理访问 BFF。
+
+### 5. Phantom IM PC 客户端
+
+```bash
+cd phantom-im/clients/pc
+npm install
+npm run dev
+```
+
+桌面开发使用 `http://127.0.0.1:5273`。生产构建会先编译 Web，再把 `dist` 复制到 Tauri 资源目录：
+
+```bash
+npm run tauri -- build --bundles app   # macOS app 主产物
+npm run build                          # 当前平台全部 bundle
+```
+
+完整配置与三平台说明见 [`phantom-im/clients/pc/README.md`](phantom-im/clients/pc/README.md)。
 
 ## 平台管理控制台
 
@@ -89,6 +108,12 @@ cd phantom-platform/sdks/web && npm test && npm run typecheck
 
 # Easy IM BFF
 cd phantom-im/bff && mvn -s .mvn/settings.xml test
+
+# Phantom IM PC
+cd phantom-im/clients/pc && npm test
+
+# Windows/Linux x64 构建、安装和启动由 GitHub Actions 执行
+# .github/workflows/pc-build-install-smoke.yml
 
 # 快速冒烟（需启动平台服务与中间件）
 cd tools/e2e-smoke && node smoke.mjs
