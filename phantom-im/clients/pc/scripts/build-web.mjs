@@ -31,6 +31,7 @@ export async function buildWeb(env = process.env) {
     cwd: paths.webRoot,
     env,
     stdio: 'inherit',
+    shell: process.platform === 'win32',
   })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`Web 构建失败，退出码 ${result.status ?? 'unknown'}`)
