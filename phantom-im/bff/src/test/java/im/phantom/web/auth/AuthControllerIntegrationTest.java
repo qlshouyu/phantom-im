@@ -33,7 +33,7 @@ class AuthControllerIntegrationTest {
         WebImProperties properties = new WebImProperties("app_test",
                 "test-app-secret-at-least-32-bytes-long", "http://localhost:28080",
                 "ws://localhost:28080/ws", "/api/phantom", Duration.ofMinutes(15),
-                true, false, List.of());
+                Duration.ofDays(30), true, false, List.of());
         AuthController controller = new AuthController(accountService, authService,
                 sessions, new JwtService(properties), properties);
         mvc = MockMvcBuilders.standaloneSetup(controller)

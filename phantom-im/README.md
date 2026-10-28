@@ -89,7 +89,7 @@ node tools/easy-im-preflight.mjs
 | Redis | `127.0.0.1:6379`，BFF Session DB 1 |
 | RocketMQ | Namesrv `127.0.0.1:9876`，gRPC proxy `127.0.0.1:8081` |
 
-BFF 的 HttpOnly Session Cookie 为 `PHANTOM_WEB_IM_SESSION`，7 天有效。浏览器不会持久化 Phantom UserToken。
+BFF 的 HttpOnly Session Cookie 为 `PHANTOM_WEB_IM_SESSION`，默认持久化 30 天；服务端 Session 仍按 7 天未活跃过期。浏览器不会持久化 Phantom UserToken。
 
 ## 验证与验收
 

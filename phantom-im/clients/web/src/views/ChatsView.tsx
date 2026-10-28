@@ -1,6 +1,8 @@
 import { singleConvId } from '@phantom/sdk-web'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../app/AppProvider'
+import { LatestRequestTracker } from '../app/LatestRequestTracker'
+import { CountBadge } from '../components/CountBadge'
 import { EmojiPicker } from '../components/EmojiPicker'
 import { ImagePreviewModal, MessageImage, type MediaBlobLoader } from '../components/MessageImage'
 import { Avatar, EmptyState, IconButton, Modal, SearchField } from '../components/ui'
@@ -15,7 +17,8 @@ import { Icon } from '../icons'
 import type { ConversationTarget } from './ContactsView'
 
 interface ChatsViewProps {
-  onUnreadChange: (count: number) => void
+  onConversationRead: (unreadCount: number) => void
+  onUnreadRefresh: () => Promise<void>
   initialTarget?: ConversationTarget
   onTargetConsumed?: () => void
 }
@@ -31,7 +34,12 @@ interface UploadTask {
   file?: File
 }
 
-export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsumed }: ChatsViewProps) {
+export default function ChatsView({
+  onConversationRead,
+  onUnreadRefresh,
+  initialTarget,
+  onTargetConsumed,
+}: ChatsViewProps) {
   const { gateway, state } = useApp()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -79,6 +87,8 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
   const draftSavedRef = useRef(new Map<string, string>())
   const initScrollRef = useRef(true)
   const conversationRefreshTimer = useRef<number | null>(null)
+  const conversationRefreshVersion = useRef(new LatestRequestTracker())
+  const inFlightReads = useRef(new Set<string>())
 
   const active = conversations.find((item) => item.id === activeId) ?? conversations[0]
   activeIdRef.current = active?.id ?? ''
@@ -102,8 +112,10 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
 
   const refreshConversations = useCallback(async () => {
     if (!gateway) return
+    const version = conversationRefreshVersion.current.begin()
     try {
       const next = await gateway.listConversations()
+      if (!conversationRefreshVersion.current.isCurrent(version)) return
       setConversations((current) => {
         const merged = mergeConversationState(next, current)
         const activePending = current.find((item) =>
@@ -113,9 +125,10 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
       setError('')
       setActiveId((current) => current || next[0]?.id || '')
     } catch (reason) {
+      if (!conversationRefreshVersion.current.isCurrent(version)) return
       setError(reasonMessage(reason, '会话加载失败'))
     } finally {
-      setLoading(false)
+      if (conversationRefreshVersion.current.isCurrent(version)) setLoading(false)
     }
   }, [gateway])
 
@@ -124,12 +137,46 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
     conversationRefreshTimer.current = window.setTimeout(() => {
       conversationRefreshTimer.current = null
       void refreshConversations()
-    }, 700)
+    }, 300)
   }, [refreshConversations])
 
-  useEffect(() => {
-    onUnreadChange(unreadTotal)
-  }, [onUnreadChange, unreadTotal])
+  const markConversationRead = useCallback((
+    conversationId: string,
+    readSeq: number,
+    unreadToClear: number,
+    muted: boolean,
+  ) => {
+    if (!gateway || readSeq <= 0) return
+    const operationKey = `${conversationId}:${readSeq}`
+    if (inFlightReads.current.has(operationKey)) return
+    inFlightReads.current.add(operationKey)
+
+    void gateway.markRead(conversationId, readSeq)
+      .then(() => {
+        inFlightReads.current.delete(operationKey)
+        conversationRefreshVersion.current.invalidate()
+        setConversations((current) => current.map((item) => {
+          if (item.id !== conversationId) return item
+          const unread = Math.max(0, item.unread - unreadToClear)
+          return {
+            ...item,
+            unread,
+            maxConvSeq: Math.max(item.maxConvSeq, readSeq),
+            readConvSeq: Math.max(item.readConvSeq, readSeq),
+            mentionMe: unread > 0 ? item.mentionMe : false,
+          }
+        }))
+        onConversationRead(muted ? 0 : unreadToClear)
+        scheduleConversationRefresh()
+      })
+      .catch((reason) => {
+        inFlightReads.current.delete(operationKey)
+        setNotice(reasonMessage(reason, '已读状态同步失败'))
+        void onUnreadRefresh()
+        scheduleConversationRefresh()
+      })
+      .finally(() => inFlightReads.current.delete(operationKey))
+  }, [gateway, onConversationRead, onUnreadRefresh, scheduleConversationRefresh])
 
   useEffect(() => {
     if (!gateway) {
@@ -139,19 +186,25 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
     }
     void refreshConversations()
     const offs = [
-      gateway.on('message', (message: { convId?: string }) => {
+      gateway.on('message', (message: { convId?: string; senderId?: string; convSeq?: number }) => {
         if (message?.convId && message.convId === activeIdRef.current) {
           setMessages(gateway.messages(message.convId))
+          const conversation = activeRef.current
+          if (conversation && message.senderId !== gateway.currentUserId) {
+            markConversationRead(
+              conversation.id,
+              Number(message.convSeq ?? 0),
+              conversation.unread,
+              conversation.muted,
+            )
+          }
         }
-        void refreshConversations()
         scheduleConversationRefresh()
       }),
       gateway.on('sync', () => {
-        void refreshConversations()
         scheduleConversationRefresh()
       }),
       gateway.on('conversation', () => {
-        void refreshConversations()
         scheduleConversationRefresh()
       }),
       gateway.on('presence', (event: any) => {
@@ -178,7 +231,7 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
       typingTimers.current.clear()
       if (conversationRefreshTimer.current) window.clearTimeout(conversationRefreshTimer.current)
     }
-  }, [gateway, refreshConversations, scheduleConversationRefresh])
+  }, [gateway, markConversationRead, refreshConversations, scheduleConversationRefresh])
 
   useEffect(() => {
     if (!gateway || !active) return
@@ -194,14 +247,6 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
         if (cancelled) return
         setMessages(next)
         setHistoryHasMore(hasMore)
-        if (active.maxConvSeq > active.readConvSeq) {
-          await gateway.markRead(active.id, active.maxConvSeq)
-          if (!cancelled) {
-            setConversations((current) => current.map((item) => item.id === active.id
-              ? { ...item, unread: 0, readConvSeq: item.maxConvSeq }
-              : item))
-          }
-        }
         requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: 'end' }))
       })
       .catch((reason) => {
@@ -223,6 +268,25 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
       unsubscribePresence()
     }
   }, [gateway, active?.id])
+
+  useEffect(() => {
+    if (!gateway || !active || loadingMessages) return
+    if (active.unread <= 0 && active.maxConvSeq <= active.readConvSeq) return
+
+    const conversationId = active.id
+    const readSeq = active.maxConvSeq
+    const unreadToClear = active.unread
+    markConversationRead(conversationId, readSeq, unreadToClear, active.muted)
+  }, [
+    active?.id,
+    active?.maxConvSeq,
+    active?.muted,
+    active?.readConvSeq,
+    active?.unread,
+    gateway,
+    loadingMessages,
+    markConversationRead,
+  ])
 
   useEffect(() => {
     setEmojiPickerOpen(false)
@@ -637,7 +701,15 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
             </button>
             <button type="button" className={filter === 'unread' ? 'is-active' : ''} onClick={() => setFilter('unread')}>
               未读
-              {unreadTotal > 0 && <span className="segment-count">{unreadTotal}</span>}
+              {unreadTotal > 0 && (
+                <CountBadge
+                  count={unreadTotal}
+                  label="未读消息"
+                  tone="accent"
+                  size="sm"
+                  className="segment-count"
+                />
+              )}
             </button>
           </div>
           <button type="button" className="toolbar-icon" aria-label="刷新会话" onClick={() => void refreshConversations()}>
@@ -712,9 +784,17 @@ export default function ChatsView({ onUnreadChange, initialTarget, onTargetConsu
                   <span className="conversation-meta">
                     {conversation.muted && <Icon name="bellOff" size={13} />}
                     {conversation.pinned && <Icon name="pin" size={12} />}
-                    {conversation.unread > 0 && (
-                      <span className="unread-badge">{conversation.unread > 99 ? '99+' : conversation.unread}</span>
-                    )}
+                    {conversation.unread > 0 && (conversation.muted
+                      ? <span className="unread-dot" aria-label={`${conversation.name}有未读消息`} />
+                      : (
+                        <CountBadge
+                          count={conversation.unread}
+                          label={`${conversation.name}未读消息`}
+                          tone="danger"
+                          size="md"
+                          className="unread-badge"
+                        />
+                      ))}
                   </span>
                 </span>
               </span>

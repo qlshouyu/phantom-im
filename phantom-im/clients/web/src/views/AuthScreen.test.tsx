@@ -49,4 +49,29 @@ describe('AuthScreen', () => {
     expect(await screen.findByText('登录名或密码错误')).toBeInTheDocument()
     expect(screen.getByTestId('auth-login-submit')).toBeEnabled()
   })
+
+  it('用户名或密码错误时显示表单提示并保留已输入内容', async () => {
+    const user = userEvent.setup()
+    const onLogin = vi.fn(async () => {
+      throw new BffApiError({
+        message: '登录名或密码错误',
+        code: 2003,
+        status: 401,
+        unauthorized: true,
+        requestId: 'req-login',
+      })
+    })
+    render(<AuthScreen onLogin={onLogin} onRegister={vi.fn()} />)
+
+    await user.type(screen.getByLabelText('登录名'), 'alice_1')
+    await user.type(screen.getByLabelText('密码'), 'wrong-password')
+    await user.click(screen.getByTestId('auth-login-submit'))
+
+    expect(await screen.findByTestId('auth-form-error')).toHaveTextContent(
+      '登录名或密码错误（请求 req-login）',
+    )
+    expect(screen.getByLabelText('登录名')).toHaveValue('alice_1')
+    expect(screen.getByLabelText('密码')).toHaveValue('wrong-password')
+    expect(screen.getByTestId('auth-login-submit')).toBeEnabled()
+  })
 })

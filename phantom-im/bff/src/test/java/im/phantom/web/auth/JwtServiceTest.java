@@ -17,7 +17,8 @@ class JwtServiceTest {
     private static final String APP_SECRET = "test-app-secret-at-least-32-bytes-long";
     private final WebImProperties properties = new WebImProperties("app_test", APP_SECRET,
             "http://localhost:28080", "ws://localhost:28080/ws", "/api/phantom",
-            Duration.ofMinutes(15), true, false, List.of("http://localhost:5173"));
+            Duration.ofMinutes(15), Duration.ofDays(30), true, false,
+            List.of("http://localhost:5173"));
     private final JwtService service = new JwtService(properties);
     private final SessionAccount account = new SessionAccount("account-1", "user-1", "alice", "Alice", 1L);
 

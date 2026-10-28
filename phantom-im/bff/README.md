@@ -29,6 +29,7 @@ mvn -s .mvn/settings.xml spring-boot:run
 | `WEB_IM_DB_USERNAME` / `WEB_IM_DB_PASSWORD` | 否 | 独立 schema 账号 |
 | `WEB_IM_REDIS_HOST` / `PORT` / `PASSWORD` | 否 | Session Redis |
 | `WEB_IM_COOKIE_SECURE` | 否 | HTTPS 部署设为 `true` |
+| `WEB_IM_SESSION_COOKIE_MAX_AGE` | 否 | Session Cookie 持久化时长，默认 `30d`；服务端 Session 仍按 7 天未活跃过期 |
 | `WEB_IM_TEST_MODE` | 否 | 启用短期过期 Token 诊断接口 |
 | `WEB_IM_ALLOWED_ORIGINS` | 否 | 逗号分隔的允许来源 |
 
@@ -36,7 +37,7 @@ mvn -s .mvn/settings.xml spring-boot:run
 
 - `/api/auth/*` 负责注册、登录、Session、短期 Token 与退出。
 - `GET /api/accounts/lookup?identifier=...` 在登录 Session 下按登录名或 Phantom ID 精确解析用户，供添加好友前确认资料。
-- 注册不会创建登录 Session；登录成功才设置 HttpOnly Cookie。
+- 注册不会创建登录 Session；登录成功才设置 HttpOnly Cookie。Cookie 默认持久化 30 天，服务端 Redis Session 仍按 7 天未活跃过期，退出登录会立即清除 Cookie 和服务端 Session。
 - `/api/phantom/**` 只代理公开用户面 API，要求 Session 中的 Phantom ID 与 `X-User-Id` 一致。
 - 代理会覆盖可信的 `X-App-Id`、`X-User-Id`，并转发 `Authorization`、`Content-Type`、`User-Agent`、`X-Device-Id`。
 - `401`、字段错误、`request_id` 和上游中断均使用统一错误语义。

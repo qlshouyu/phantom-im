@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useApp } from '../app/AppProvider'
+import { CountBadge } from '../components/CountBadge'
 import { Avatar, EmptyState, IconButton, Modal, SearchField } from '../components/ui'
 import type {
   Friend,
@@ -440,7 +441,15 @@ export default function ContactsView({ onOpenConversation }: ContactsViewProps) 
           </button>
           <button type="button" className={section === 'requests' ? 'is-active' : ''} onClick={() => switchSection('requests')}>
             <Icon name="message" size={17} />申请
-            {requestUnread > 0 && <span className="unread-badge">{requestUnread}</span>}
+            {requestUnread > 0 && (
+              <CountBadge
+                count={requestUnread}
+                label="未读好友申请"
+                tone="danger"
+                size="md"
+                className="unread-badge"
+              />
+            )}
           </button>
         </div>
 
@@ -813,7 +822,7 @@ function FriendDetail({
           </div>
         </section>
         <section className="content-card">
-          <div className="card-heading"><div><span className="eyebrow">CONNECTIONS</span><h3>共同群组</h3></div><span className="heading-count">{commonGroups.length}</span></div>
+          <div className="card-heading"><div><span className="eyebrow">CONNECTIONS</span><h3>共同群组</h3></div><CountBadge count={commonGroups.length} label="共同群组" tone="neutral" size="md" className="heading-count" /></div>
           {commonGroups.length > 0 ? (
             <div className="mutual-group-list">{commonGroups.map((group) => <div className="mutual-group-row" key={group}><Avatar chars={[group[0], '群', '聊', '组']} tone="violet" size={36} group /><span><strong>{group}</strong><small>共同群组</small></span></div>)}</div>
           ) : <p className="card-empty-copy">暂时没有共同群组</p>}
@@ -876,7 +885,7 @@ function GroupDetail({
       </section>
       <div className="profile-content-grid group-content-grid">
         <section className="content-card">
-          <div className="card-heading"><div><span className="eyebrow">MEMBERS</span><h3>群成员</h3></div><span className="heading-count">{members.length}</span></div>
+          <div className="card-heading"><div><span className="eyebrow">MEMBERS</span><h3>群成员</h3></div><CountBadge count={members.length} label="群成员" tone="neutral" size="md" className="heading-count" /></div>
           <div className="group-member-list">
             {members.map((member) => (
               <div className="group-member-row" key={member.userId}>

@@ -46,7 +46,7 @@ class AccountServiceTest {
         WebImProperties properties = new WebImProperties("app_test", "openapi-secret",
                 "http://localhost:28080",
                 "ws://localhost:28080/ws", "/api/phantom", Duration.ofMinutes(15),
-                true, false, List.of("http://localhost:5173"));
+                Duration.ofDays(30), true, false, List.of("http://localhost:5173"));
         service = new AccountService(repository, openApi, encoder, properties, transaction);
     }
 

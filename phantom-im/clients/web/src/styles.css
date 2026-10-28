@@ -5135,10 +5135,23 @@ textarea,
   border-color: rgba(255, 141, 141, 0.35);
 }
 
+.auth-notice--form-error {
+  color: #116a47;
+  border-color: rgba(215, 91, 97, 0.38);
+  background: rgba(215, 91, 97, 0.16);
+  box-shadow: inset 3px 0 0 rgba(215, 91, 97, 0.82);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
 
 .auth-notice > svg {
   flex: none;
   color: #29a36b;
+}
+
+.auth-notice--form-error > svg {
+  color: #116a47;
 }
 
 .auth-form {
@@ -5837,3 +5850,54 @@ textarea,
   background: rgba(255, 255, 255, 0.02);
 }
 .blacklist-entry strong { margin-left: auto; color: #ff9ba7; }
+
+/* Shared compact count badges */
+.count-badge {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.count-badge--danger {
+  color: white;
+  background: #ef6b65;
+}
+
+.count-badge--accent {
+  color: white;
+  background: var(--green);
+}
+
+.count-badge--neutral {
+  color: #8b9690;
+  background: #edf2ef;
+}
+
+.count-badge--sm {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.count-badge--md {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: #a1aaa5;
+}

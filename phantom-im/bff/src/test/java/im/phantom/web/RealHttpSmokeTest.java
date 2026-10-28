@@ -63,6 +63,7 @@ class RealHttpSmokeTest {
         registry.add("phantom.web-im.phantom-http-url",
                 () -> "http://127.0.0.1:" + UPSTREAM.getAddress().getPort());
         registry.add("phantom.web-im.test-mode", () -> "true");
+        registry.add("phantom.web-im.session-cookie-max-age", () -> "30d");
         registry.add("spring.datasource.url", () -> System.getenv().getOrDefault("WEB_IM_DB_URL",
                 "jdbc:mysql://127.0.0.1:3306/phantom_web_im?useSSL=false&serverTimezone=Asia/Shanghai"
                         + "&characterEncoding=utf8&allowPublicKeyRetrieval=true"));
@@ -112,6 +113,11 @@ class RealHttpSmokeTest {
         assertThat(login.status()).isEqualTo(200);
         String cookie = login.cookie();
         assertThat(cookie).startsWith("PHANTOM_WEB_IM_SESSION=");
+        assertThat(login.setCookie())
+                .contains("Max-Age=2592000")
+                .contains("Expires=")
+                .contains("HttpOnly")
+                .contains("SameSite=Lax");
 
         HttpResult restored = request("GET", "/api/auth/me", null, cookie, null);
         assertThat(restored.status()).isEqualTo(200);
@@ -140,6 +146,7 @@ class RealHttpSmokeTest {
 
         HttpResult logout = request("POST", "/api/auth/logout", "", cookie, null);
         assertThat(logout.status()).isEqualTo(200);
+        assertThat(logout.setCookie()).contains("Max-Age=0");
         HttpResult afterLogout = request("GET", "/api/auth/me", null, cookie, null);
         assertThat(afterLogout.status()).isEqualTo(401);
     }
@@ -162,16 +169,17 @@ class RealHttpSmokeTest {
         Map<String, Object> payload = response.body().isBlank()
                 ? Map.of()
                 : new com.fasterxml.jackson.databind.ObjectMapper().readValue(response.body(), Map.class);
+        String setCookie = response.headers().allValues("Set-Cookie").stream()
+                .filter(value -> value.startsWith("PHANTOM_WEB_IM_SESSION="))
+                .findFirst()
+                .orElse("");
         return new HttpResult(response.statusCode(), payload,
                 response.headers().firstValue("X-Request-Id").orElse(""),
-                response.headers().allValues("Set-Cookie").stream()
-                        .filter(value -> value.startsWith("PHANTOM_WEB_IM_SESSION="))
-                        .findFirst()
-                        .map(value -> value.split(";", 2)[0])
-                        .orElse(""));
+                setCookie.isEmpty() ? "" : setCookie.split(";", 2)[0], setCookie);
     }
 
-    private record HttpResult(int status, Map<String, Object> body, String requestId, String cookie) {
+    private record HttpResult(int status, Map<String, Object> body, String requestId,
+                              String cookie, String setCookie) {
         @SuppressWarnings("unchecked")
         Map<String, Object> data() {
             Object value = body.get("data");

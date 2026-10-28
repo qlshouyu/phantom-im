@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from './app/AppProvider'
+import { useUnreadBadge } from './app/useUnreadBadge'
+import { CountBadge } from './components/CountBadge'
 import { Modal } from './components/ui'
 import { Icon, PhantomMark, type IconName } from './icons'
 import AuthScreen from './views/AuthScreen'
@@ -18,10 +20,10 @@ const navigation: Array<{ id: AppTab; label: string; icon: IconName }> = [
 export default function App() {
   const { state, login, register, retry, logout, dismissKicked, adapter, gateway: connectionGateway } = useApp()
   const [activeTab, setActiveTab] = useState<AppTab>('chats')
-  const [unreadTotal, setUnreadTotal] = useState(0)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutBusy, setLogoutBusy] = useState(false)
   const [chatTarget, setChatTarget] = useState<ConversationTarget>()
+  const { unreadTotal, markConversationRead, refreshUnread } = useUnreadBadge(connectionGateway)
 
   useEffect(() => {
     const currentGateway = connectionGateway
@@ -151,7 +153,13 @@ export default function App() {
                   <span className="nav-icon">
                     <Icon name={item.icon} size={23} />
                     {item.id === 'chats' && unreadTotal > 0 && (
-                      <span className="nav-badge">{unreadTotal > 99 ? '99+' : unreadTotal}</span>
+                      <CountBadge
+                        count={unreadTotal}
+                        label="未读消息"
+                        tone="danger"
+                        size="sm"
+                        className="nav-badge"
+                      />
                     )}
                   </span>
                   <span>{item.label}</span>
@@ -171,7 +179,8 @@ export default function App() {
         <div className="workspace">
           {activeTab === 'chats' && (
             <ChatsView
-              onUnreadChange={setUnreadTotal}
+              onConversationRead={markConversationRead}
+              onUnreadRefresh={refreshUnread}
               initialTarget={chatTarget}
               onTargetConsumed={() => setChatTarget(undefined)}
             />

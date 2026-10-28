@@ -36,6 +36,14 @@ import type {
 
 type EventHandler = (...args: any[]) => void
 
+export interface ConversationPageSnapshot {
+  conversations: Conversation[]
+  badgeCount: number
+  maxUserSeq: number
+  hasMore: boolean
+  nextCursor?: string
+}
+
 /**
  * Phantom SDK 的领域适配器。
  * 页面不直接处理 snake_case 快照、协议字段或 SDK 生命周期细节。
@@ -65,11 +73,22 @@ export class PhantomGateway {
     if (userId && name) this.names.set(userId, name)
   }
 
-  async listConversations(limit = 200): Promise<Conversation[]> {
+  async listConversationPage(limit = 200): Promise<ConversationPageSnapshot> {
     const page = await this.client.listConversations(undefined, limit)
-    return (page.items ?? []).map(mapConversation)
+    const conversations = (page.items ?? []).map(mapConversation)
       .sort((left: Conversation, right: Conversation) =>
         Number(right.pinned) - Number(left.pinned) || right.timestamp - left.timestamp)
+    return {
+      conversations,
+      badgeCount: Number(page.badge_count ?? page.badgeCount ?? 0),
+      maxUserSeq: Number(page.max_user_seq ?? page.maxUserSeq ?? 0),
+      hasMore: Boolean(page.has_more ?? page.hasMore),
+      nextCursor: page.next_cursor ?? page.nextCursor ?? undefined,
+    }
+  }
+
+  async listConversations(limit = 200): Promise<Conversation[]> {
+    return (await this.listConversationPage(limit)).conversations
   }
 
   async getConversation(convId: string): Promise<Conversation> {

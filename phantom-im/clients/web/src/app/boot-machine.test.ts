@@ -106,4 +106,50 @@ describe('AppBootMachine', () => {
     expect(service.login).toHaveBeenCalledOnce()
     expect(machine.state.phase).toBe('ready')
   })
+
+  it('登录失败时保留登录页并把错误抛给表单', async () => {
+    const failure = new BffApiError({
+      message: '登录名或密码错误',
+      code: 2003,
+      status: 401,
+      unauthorized: true,
+    })
+    const machine = new AppBootMachine({
+      bff: bff({
+        me: vi.fn(async () => { throw unauthorized }),
+        login: vi.fn(async () => { throw failure }),
+      }),
+      connect: vi.fn(),
+    })
+    await machine.start()
+    const phases: string[] = []
+    machine.subscribe((snapshot) => phases.push(snapshot.phase))
+
+    await expect(machine.login({ loginName: 'alice', password: 'wrong' }))
+      .rejects.toBe(failure)
+
+    expect(machine.state).toMatchObject({
+      phase: 'unauthenticated',
+      error: failure,
+      retryable: false,
+    })
+    expect(phases).not.toContain('bootstrapping')
+  })
+
+  it('凭据通过但连接失败时进入可重试错误页', async () => {
+    const failure = new Error('连接失败')
+    const machine = new AppBootMachine({
+      bff: bff(),
+      connect: vi.fn(async () => { throw failure }),
+    })
+
+    await expect(machine.login({ loginName: 'alice', password: 'password1' }))
+      .rejects.toBe(failure)
+
+    expect(machine.state).toMatchObject({
+      phase: 'error',
+      error: failure,
+      retryable: true,
+    })
+  })
 })

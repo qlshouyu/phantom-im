@@ -330,7 +330,7 @@ export default function AuthScreen({ onLogin, onRegister }: AuthScreenProps) {
           )}
 
           {errors.form && (
-            <div className="auth-notice auth-notice--error" role="alert" data-testid="auth-form-error">
+            <div className="auth-notice auth-notice--form-error" role="alert" data-testid="auth-form-error">
               <Icon name="shield" size={16} />
               {errors.form}
             </div>

@@ -93,10 +93,23 @@ export class AppBootMachine<TConnection = unknown> {
   }
 
   async login(input: LoginInput): Promise<BootSnapshot> {
-    this.update({ phase: 'bootstrapping', error: undefined, reason: undefined, retryable: false })
+    // 登录失败必须留在当前登录表单，并把异常交回表单展示。
+    this.update({ error: undefined, reason: undefined, retryable: false })
+    let runtime: RuntimeConfig
+    let account: SessionAccount
     try {
-      const runtime = this.snapshot.runtime ?? await this.bff.runtimeConfig()
-      const account = await this.bff.login(input)
+      runtime = this.snapshot.runtime ?? await this.bff.runtimeConfig()
+      account = await this.bff.login(input)
+    } catch (error) {
+      this.update({
+        phase: 'unauthenticated',
+        account: undefined,
+        error,
+        retryable: false,
+      })
+      throw error
+    }
+    try {
       return await this.connectAccount(runtime, account)
     } catch (error) {
       const unauthorized = isUnauthorized(error)
@@ -105,7 +118,7 @@ export class AppBootMachine<TConnection = unknown> {
         error,
         retryable: !unauthorized,
       })
-      return this.snapshot
+      throw error
     }
   }
 

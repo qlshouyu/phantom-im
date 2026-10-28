@@ -17,6 +17,7 @@ public record WebImProperties(
         @NotBlank String phantomWsUrl,
         @NotBlank String proxyBaseUrl,
         @NotNull Duration tokenTtl,
+        @NotNull Duration sessionCookieMaxAge,
         boolean testMode,
         boolean secureCookie,
         List<String> allowedOrigins) {

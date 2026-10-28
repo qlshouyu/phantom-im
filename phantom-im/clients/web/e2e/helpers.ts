@@ -51,7 +51,7 @@ export async function openContacts(page: Page): Promise<void> {
 }
 
 export async function openMessages(page: Page): Promise<void> {
-  const button = page.getByRole('button', { name: '消息', exact: true })
+  const button = page.locator('.nav-item').filter({ hasText: '消息' })
   await button.click()
   await expect(button).toHaveAttribute('aria-current', 'page')
 }
