@@ -86,7 +86,9 @@ DMG 创建依赖交互式 Finder。无窗口/无 Finder 自动化的 CI 或远�
 
 ## BFF 地址配置
 
-默认地址为 `http://127.0.0.1:28090`，运行时按以下优先级读取：
+安装包安装完成后，客户端首次启动时会在用户配置目录创建 `config.json`；若文件已存在则不会覆盖。默认写入的 BFF 地址为 `http://10.10.137.197:28090`，请求超时为 60 秒。
+
+运行时按以下优先级读取配置：
 
 1. 环境变量 `PHANTOM_IM_BFF_URL`；
 2. 桌面配置文件 `config.json`；
@@ -104,7 +106,7 @@ DMG 创建依赖交互式 Finder。无窗口/无 Finder 自动化的 CI 或远�
 
 ```json
 {
-  "bff_url": "https://im.example.com",
+  "bff_url": "http://10.10.137.197:28090",
   "timeout_seconds": 60
 }
 ```

@@ -1,13 +1,14 @@
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-pub const DEFAULT_BFF_URL: &str = "http://127.0.0.1:28090";
+pub const DEFAULT_BFF_URL: &str = "http://10.10.137.197:28090";
 pub const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
 pub const BFF_URL_ENV: &str = "PHANTOM_IM_BFF_URL";
 pub const BFF_TIMEOUT_ENV: &str = "PHANTOM_IM_BFF_TIMEOUT_SECONDS";
@@ -26,6 +27,18 @@ pub enum ConfigError {
         #[source]
         source: std::io::Error,
     },
+    #[error("无法创建桌面配置目录 {path}: {source}")]
+    CreateDirectory {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("无法创建桌面配置 {path}: {source}")]
+    Write {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("桌面配置格式无效: {0}")]
     InvalidConfig(String),
     #[error("BFF 超时必须是大于 0 的秒数")]
@@ -38,13 +51,52 @@ pub struct GatewayConfig {
     request_timeout: Duration,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct FileConfig {
     bff_url: Option<String>,
     timeout_seconds: Option<u64>,
 }
 
 impl GatewayConfig {
+    pub fn ensure_default_file(config_path: &Path) -> Result<(), ConfigError> {
+        if config_path.is_file() {
+            return Ok(());
+        }
+
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent).map_err(|source| ConfigError::CreateDirectory {
+                path: parent.display().to_string(),
+                source,
+            })?;
+        }
+
+        let mut content = serde_json::to_string_pretty(&FileConfig {
+            bff_url: Some(DEFAULT_BFF_URL.to_owned()),
+            timeout_seconds: Some(DEFAULT_TIMEOUT_SECONDS),
+        })
+        .map_err(|error| ConfigError::InvalidConfig(error.to_string()))?;
+        content.push('\n');
+
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(config_path)
+        {
+            Ok(mut file) => {
+                file.write_all(content.as_bytes())
+                    .map_err(|source| ConfigError::Write {
+                        path: config_path.display().to_string(),
+                        source,
+                    })
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(source) => Err(ConfigError::Write {
+                path: config_path.display().to_string(),
+                source,
+            }),
+        }
+    }
+
     pub fn parse(raw: &str, timeout_seconds: u64) -> Result<Self, ConfigError> {
         let bff_url =
             Url::parse(raw).map_err(|error| ConfigError::InvalidUrl(error.to_string()))?;
@@ -199,5 +251,41 @@ mod tests {
                 .unwrap();
         assert_eq!(config.bff_url().as_str(), "http://env.example.com:9000/");
         assert_eq!(config.request_timeout(), Duration::from_secs(20));
+    }
+
+    #[test]
+    fn uses_remote_bff_url_as_default() {
+        let config = GatewayConfig::from_sources(None, None, None).unwrap();
+
+        assert_eq!(config.bff_url().as_str(), "http://10.10.137.197:28090/");
+        assert_eq!(config.request_timeout(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn first_launch_creates_default_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/config.json");
+
+        GatewayConfig::ensure_default_file(&path).unwrap();
+
+        let content = fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            value["bff_url"].as_str(),
+            Some("http://10.10.137.197:28090")
+        );
+        assert_eq!(value["timeout_seconds"].as_u64(), Some(60));
+    }
+
+    #[test]
+    fn default_config_creation_does_not_overwrite_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let existing = r#"{"bff_url":"https://custom.example.com"}"#;
+        fs::write(&path, existing).unwrap();
+
+        GatewayConfig::ensure_default_file(&path).unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), existing);
     }
 }

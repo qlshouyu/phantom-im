@@ -68,6 +68,7 @@ pub fn run() {
             }
 
             let config_path = app.path().app_config_dir()?.join("config.json");
+            GatewayConfig::ensure_default_file(&config_path)?;
             let config = GatewayConfig::from_environment_and_file(Some(&config_path))?;
             let web_root = resolve_web_root(app)?;
             let handle = tauri::async_runtime::block_on(gateway::start(config, web_root))?;
