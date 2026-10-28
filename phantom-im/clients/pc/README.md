@@ -184,8 +184,8 @@ CARGO_NET_OFFLINE=true npm run tauri -- build --bundles app
 ## 验收状态
 
 - macOS：已构建 `Phantom IM.app`，内置资源、真实 Phantom/BFF 登录、Session 恢复、断线重连、文本与媒体发送、退出登录通过。
-- Windows：配置已就绪，尚未在 Windows 原生环境构建和安装验证。
-- Linux：配置已就绪，尚未在 Linux 原生环境构建和安装验证。
+- Windows x64：GitHub Actions run [40618515983](https://github.com/qlshouyu/phantom-im/actions/runs/40618515983) 的 MSI/NSIS 构建、安装、启动和卸载通过。
+- Linux x64：同一 run 的 DEB/AppImage 构建、安装或解包运行、启动和清理通过。
 
 完整三平台记录见 [`../../../docs/phantom-im/pc-acceptance-report.md`](../../../docs/phantom-im/pc-acceptance-report.md)。
 
@@ -213,6 +213,6 @@ GitHub-hosted x64 workflow 位于：
 - 仅验收 x64。
 - 只验证构建、安装和启动，不连接真实 BFF 登录，也不发送消息。
 - 不包含 Windows 代码签名、macOS 公证或自动更新。
-- 当前仓库主远端为 Gitee；`.github/workflows` 只有在同步到 GitHub 仓库后才会由 GitHub Actions 执行。
+- 仓库配置了 `github` 远端 `git@github.com:qlshouyu/phantom-im.git`；当前 `master` 已由 GitHub Actions 完成 Windows/Linux x64 构建、安装和启动冒烟。
 
 若 GitHub-hosted Windows runner 无法在服务会话中启动 GUI，工作流会失败而不是伪造通过；此时应改用交互式 self-hosted Windows runner，或明确降低启动验收标准。

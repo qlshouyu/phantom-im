@@ -28,7 +28,7 @@ phantom-im/
 - Phantom 平台服务、Web SDK、Easy IM BFF 与 React Web 客户端已接入真实 IM 链路。
 - `phantom-im/clients/web/` 使用 BFF、Web SDK 和 Phantom 真实业务数据。
 - `phantom-im/clients/pc/` 提供 Tauri 2 桌面客户端，构建时复用 Web 生产产物并内置到安装包。
-- macOS 已完成桌面主链路验收；Windows、Linux 构建配置已就绪，仍需对应原生环境验证。
+- macOS 已完成桌面真实业务链路验收；Windows、Linux x64 已通过 GitHub-hosted CI 的构建、安装和启动验收。
 
 ## 本地启动
 

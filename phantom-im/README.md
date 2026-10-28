@@ -9,7 +9,7 @@ Easy IM 是 Phantom IM PaaS 的消费方产品，包含独立 BFF、React Web �
 - 消息、通讯录、好友申请、群组、资料、设备、通知、搜索和诊断均使用真实 SDK/PaaS 数据。
 - 收藏夹、云空间、群文件、群相册和语音/视频通话没有公开 PaaS 契约，界面明确显示暂未开放。
 - 本地真实链路由 Playwright 双/多用户上下文、BFF HTTP 冒烟和现有 `tools/e2e-smoke` 覆盖。
-- Phantom IM PC 复用 Web 生产构建，通过 Rust 回环同源网关连接 BFF；macOS 主链路已验收，Windows/Linux 需原生环境验收。
+- Phantom IM PC 复用 Web 生产构建，通过 Rust 回环同源网关连接 BFF；macOS 真实业务链路已验收，Windows/Linux x64 的 CI 构建、安装和启动验收已通过。
 
 完整能力状态见 [`docs/phantom-im/integration-matrix.md`](../docs/phantom-im/integration-matrix.md)，验收记录见 [`docs/phantom-im/acceptance-report.md`](../docs/phantom-im/acceptance-report.md)。
 

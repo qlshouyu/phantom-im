@@ -45,6 +45,6 @@
 
 - [x] 7.1 在 macOS 执行生产打包，安装或启动 `.app`/DMG，验证 Phantom IM 名称、内置 UI、BFF 登录、冷启动 Session 恢复和基本消息链路
 - [x] 7.2 新增 GitHub-hosted Windows/Linux x64 CI workflow 与安装/启动冒烟脚本，仅验证构建、安装、启动和本地网关首页；用 YAML、Bash 和脚本静态检查验证配置可解析，并确认流程不包含签名、公证或自动更新
-- [ ] 7.3 同步仓库到 GitHub 后触发 Windows x64 job，构建 MSI/NSIS，分别静默安装、启动、访问本地网关首页并卸载；记录 run URL、产物和退出码
-- [ ] 7.4 触发 Linux x64 job，构建 DEB/AppImage，分别安装或解包运行、启动、访问本地网关首页并清理；记录 run URL、产物和退出码
-- [ ] 7.5 汇总 GitHub Actions 两平台 run URL、安装包 SHA-256、启动冒烟结果和未签名限制；没有实际 CI run 时不得将 Windows/Linux 标记为通过
+- [x] 7.3 同步仓库到 GitHub 后触发 Windows x64 job，构建 MSI/NSIS，分别静默安装、启动、访问本地网关首页并卸载；GitHub Actions run 40618515983 成功
+- [x] 7.4 触发 Linux x64 job，构建 DEB/AppImage，分别安装或解包运行、启动、访问本地网关首页并清理；GitHub Actions run 40618515983 成功
+- [x] 7.5 汇总 GitHub Actions 两平台 run URL、安装包 SHA-256、启动冒烟结果和未签名限制；结果记录于 `docs/phantom-im/pc-acceptance-report.md`

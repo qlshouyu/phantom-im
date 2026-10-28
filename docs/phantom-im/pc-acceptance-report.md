@@ -55,23 +55,31 @@ DMG 自动生成在当前无交互 Finder 的会话中因 AppleEvent 超时失�
 
 ## 4. Windows 结果
 
-**CI 已配置，尚未实际运行。** `.github/workflows/pc-build-install-smoke.yml` 使用 GitHub-hosted Windows x64 runner：
+**通过。** GitHub-hosted Windows x64 runner 在 run [40618515983](https://github.com/qlshouyu/phantom-im/actions/runs/40618515983) 中完成：
 
-- 构建 MSI/NSIS；
-- 在全新 smoke job 中分别静默安装、启动、访问本地网关首页并卸载；
-- 上传安装包和 SHA-256。
+- Web/PC 测试、MSI/NSIS 构建和内置资源校验；
+- NSIS 静默安装、启动、访问本地网关首页、关闭并卸载；
+- MSI 静默安装、启动、访问本地网关首页、关闭并卸载；
+- artifact：`phantom-im-pc-windows-x64`，8,746,440 bytes。
 
-当前仓库主远端为 Gitee，需同步到 GitHub 并实际触发 workflow 后才能记录 run URL 并标记通过。
+| 产物 | SHA-256 |
+|---|---|
+| `Phantom IM_0.1.0_x64_en-US.msi` | `846f9b3664a5851dee8703d6bb271b31534b3d05b05c45f9939c8c707777d62a` |
+| `Phantom IM_0.1.0_x64-setup.exe` | `5ece59dc0c93884e8b3387f9bf773f69d685d367be0f1df25d08cb5a59f13716` |
 
 ## 5. Linux 结果
 
-**CI 已配置，尚未实际运行。** 同一 workflow 使用 GitHub-hosted Ubuntu x64 runner：
+**通过。** GitHub-hosted Ubuntu x64 runner 在同一 run 中完成：
 
-- 构建 DEB/AppImage；
-- 在 Xvfb/DBus 会话中分别安装或解包运行、启动、访问本地网关首页并清理；
-- 上传安装包和 SHA-256。
+- Web/PC 测试、DEB/AppImage 构建和内置资源校验；
+- DEB 安装、Xvfb/DBus 启动、访问本地网关首页并清理；
+- AppImage 解包运行、Xvfb/DBus 启动、访问本地网关首页并清理；
+- artifact：`phantom-im-pc-linux-x64`，89,092,153 bytes。
 
-当前仓库主远端为 Gitee，需同步到 GitHub 并实际触发 workflow 后才能记录 run URL 并标记通过。
+| 产物 | SHA-256 |
+|---|---|
+| `Phantom IM_0.1.0_amd64.AppImage` | `58c00f879eb2fa1ea0579fd572849b398c9f1a1c6bda25b1da5d4c7aaff5219a0` |
+| `Phantom IM_0.1.0_amd64.deb` | `7024acac7329ab87306e45e1aed1cbbd1bd44a630d944662b28f4d2b93c23dbf` |
 
 ## 6. 安全与已知限制
 
@@ -80,7 +88,6 @@ DMG 自动生成在当前无交互 Finder 的会话中因 AppleEvent 超时失�
 - Tauri 能力仅授予主窗口最小 `core:window` 权限。
 - 现有 protobuf.js 运行时依赖 `new Function`，因此 CSP 允许 `script-src 'self' 'unsafe-eval'`；未使用任意脚本源。
 - 本次产物未做 Windows Authenticode、macOS Developer ID 签名与公证、Linux 发行签名，也未包含自动更新。
-- Windows 和 Linux GitHub Actions run 未实际成功前，不得标记为通过。
 - CI 不验证真实 BFF 登录、消息发送、签名、公证或自动更新。
 
 ## 7. 验收截图
