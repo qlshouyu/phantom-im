@@ -53,7 +53,7 @@ for _ in $(seq 1 60); do
     exit 1
   fi
   port="$(lsof -nP -a -p "$app_pid" -iTCP -sTCP:LISTEN -Fn 2>/dev/null |
-    sed -n 's/^n127\.0\.0\.1://p' | head -n 1)"
+    sed -n 's/^n127\.0\.0\.1://p' | head -n 1 || true)"
   [[ -n "$port" ]] && break
   sleep 0.5
 done
