@@ -60,6 +60,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
+            phantom-platform/sdks/web/package-lock.json
             phantom-im/clients/web/package-lock.json
             phantom-im/clients/pc/package-lock.json
 
@@ -85,6 +86,10 @@ jobs:
             libxdo-dev \
             patchelf \
             wget
+
+      - name: Install SDK dependencies
+        working-directory: phantom-platform/sdks/web
+        run: npm ci
 
       - name: Install Web dependencies
         working-directory: phantom-im/clients/web

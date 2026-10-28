@@ -49,7 +49,11 @@ describe('领域映射', () => {
       maxConvSeq: 88,
       readConvSeq: 86,
     })
-    expect(conversation.time).toBe('10:24')
+    const expectedTime = new Date(now).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    expect(conversation.time).toBe(expectedTime)
   })
 
   it('映射消息方向、撤回状态与媒体附件', () => {
