@@ -55,8 +55,7 @@ phantom:
     token-ttl: 15m
     test-mode: ${WEB_IM_TEST_MODE:false}
     secure-cookie: ${WEB_IM_COOKIE_SECURE:false}
-    allowed-origins: ${WEB_IM_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:28090,http://127.0.0.1:28090}
-
+    allowed-origins: ${WEB_IM_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:28090,http://127.0.0.1:28090,http://10.10.137.197:28090}
 management:
   endpoints:
     web:
