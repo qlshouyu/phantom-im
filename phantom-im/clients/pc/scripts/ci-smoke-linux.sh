@@ -10,7 +10,7 @@ package_name=""
 installed_package=false
 
 cleanup() {
-  if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
+  if [[ -n "$app_pid" ]]; then
     kill -TERM -- "-$app_pid" 2>/dev/null || kill -TERM "$app_pid" 2>/dev/null || true
     wait "$app_pid" 2>/dev/null || true
   fi
@@ -45,20 +45,29 @@ case "$format" in
 esac
 
 app_pid=$!
+
+find_gateway_port() {
+  local candidate page
+  while IFS= read -r candidate; do
+    page="$(curl -fsS --max-time 1 --noproxy '*' "http://127.0.0.1:$candidate/" 2>/dev/null || true)"
+    if [[ "$page" == *"<title>Phantom IM</title>"* ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done < <(ss -ltnH | awk '{ print $4 }' | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | sort -u)
+  return 1
+}
+
 port=""
 for _ in $(seq 1 60); do
-  if ! kill -0 "$app_pid" 2>/dev/null; then
-    echo "Phantom IM exited during startup" >&2
-    cat "$log_file" >&2 || true
-    exit 1
+  if port="$(find_gateway_port)"; then
+    break
   fi
-  port="$(lsof -nP -a -p "$app_pid" -iTCP -sTCP:LISTEN -Fn 2>/dev/null |
-    sed -n 's/^n127\.0\.0\.1://p' | head -n 1 || true)"
-  [[ -n "$port" ]] && break
+  port=""
   sleep 0.5
 done
 [[ -n "$port" ]] || {
-  echo "No loopback gateway listener appeared for PID $app_pid" >&2
+  echo "No Phantom IM loopback gateway appeared within 30 seconds" >&2
   cat "$log_file" >&2 || true
   exit 1
 }
