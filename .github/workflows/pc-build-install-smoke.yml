@@ -106,6 +106,10 @@ jobs:
           npm run typecheck
           npm run test:contract
 
+      - name: Prepare Web resources for PC tests
+        working-directory: phantom-im/clients/pc
+        run: npm run build:web
+
       - name: Test PC
         working-directory: phantom-im/clients/pc
         run: npm test
