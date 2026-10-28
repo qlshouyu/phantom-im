@@ -184,7 +184,7 @@ CARGO_NET_OFFLINE=true npm run tauri -- build --bundles app
 ## 验收状态
 
 - macOS：已构建 `Phantom IM.app`，内置资源、真实 Phantom/BFF 登录、Session 恢复、断线重连、文本与媒体发送、退出登录通过。
-- Windows x64：GitHub Actions run [40618515983](https://github.com/qlshouyu/phantom-im/actions/runs/40618515983) 的 MSI/NSIS 构建、安装、启动和卸载通过。
+- Windows x64：GitHub Actions run [40622977596](https://github.com/qlshouyu/phantom-im/actions/runs/40622977596) 的 MSI/NSIS 构建、安装、启动和卸载通过。
 - Linux x64：同一 run 的 DEB/AppImage 构建、安装或解包运行、启动和清理通过。
 
 完整三平台记录见 [`../../../docs/phantom-im/pc-acceptance-report.md`](../../../docs/phantom-im/pc-acceptance-report.md)。

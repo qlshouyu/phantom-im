@@ -55,17 +55,17 @@ DMG 自动生成在当前无交互 Finder 的会话中因 AppleEvent 超时失�
 
 ## 4. Windows 结果
 
-**通过。** GitHub-hosted Windows x64 runner 在 run [40618515983](https://github.com/qlshouyu/phantom-im/actions/runs/40618515983) 中完成：
+**通过。** GitHub-hosted Windows x64 runner 在 run [40622977596](https://github.com/qlshouyu/phantom-im/actions/runs/40622977596) 中完成：
 
 - Web/PC 测试、MSI/NSIS 构建和内置资源校验；
 - NSIS 静默安装、启动、访问本地网关首页、关闭并卸载；
 - MSI 静默安装、启动、访问本地网关首页、关闭并卸载；
-- artifact：`phantom-im-pc-windows-x64`，8,746,440 bytes。
+- artifact：`phantom-im-pc-windows-x64`，8,744,347 bytes。
 
 | 产物 | SHA-256 |
 |---|---|
-| `Phantom IM_0.1.0_x64_en-US.msi` | `846f9b3664a5851dee8703d6bb271b31534b3d05b05c45f9939c8c707777d62a` |
-| `Phantom IM_0.1.0_x64-setup.exe` | `5ece59dc0c93884e8b3387f9bf773f69d685d367be0f1df25d08cb5a59f13716` |
+| `Phantom IM_0.1.0_x64_en-US.msi` | `1d2696e3311ea01a5c71fa9e0ae2eff012d150b2a8d26cd599f620a7d60e82cc` |
+| `Phantom IM_0.1.0_x64-setup.exe` | `47096326520b01c59681996686c35b4de333af948f0b5ad10ad1ca29fd4dcb1a` |
 
 ## 5. Linux 结果
 
@@ -74,12 +74,12 @@ DMG 自动生成在当前无交互 Finder 的会话中因 AppleEvent 超时失�
 - Web/PC 测试、DEB/AppImage 构建和内置资源校验；
 - DEB 安装、Xvfb/DBus 启动、访问本地网关首页并清理；
 - AppImage 解包运行、Xvfb/DBus 启动、访问本地网关首页并清理；
-- artifact：`phantom-im-pc-linux-x64`，89,092,153 bytes。
+- artifact：`phantom-im-pc-linux-x64`，89,092,124 bytes。
 
 | 产物 | SHA-256 |
 |---|---|
-| `Phantom IM_0.1.0_amd64.AppImage` | `58c00f879eb2fa1ea0579fd572849b398c9f1a1c6bda25b1da5d4c7aaff5219a0` |
-| `Phantom IM_0.1.0_amd64.deb` | `7024acac7329ab87306e45e1aed1cbbd1bd44a630d944662b28f4d2b93c23dbf` |
+| `Phantom IM_0.1.0_amd64.AppImage` | `bd5a552056afd0ed0a79fdb9c957f4cdcee2209d076ade471efc50f37600edd5` |
+| `Phantom IM_0.1.0_amd64.deb` | `aea155243149d37d7dbf9747c1352c8e613d0bbd518fbdef3ee92223a5d7313b` |
 
 ## 6. 安全与已知限制
 
