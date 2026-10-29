@@ -23,6 +23,16 @@ export interface LoginOptions {
   deviceType?: DeviceType;
 }
 
+export class PhantomAuthError extends Error {
+  readonly code: number;
+
+  constructor(code: number, message = `auth failed code=${code}`) {
+    super(message);
+    this.name = "PhantomAuthError";
+    this.code = code;
+  }
+}
+
 export interface SendMessageInput {
   convId: string;
   convType?: "SINGLE" | "GROUP";
@@ -199,7 +209,7 @@ export class PhantomClient extends Emitter {
           if (response.code !== 0) {
             this.authFailed = true;
             if (response.code === 2001) this.emit("tokenExpired");
-            reject(new Error("auth failed code=" + response.code));
+            reject(new PhantomAuthError(response.code));
             try { ws.close(); } catch { /* noop */ }
             return;
           }
@@ -330,9 +340,11 @@ export class PhantomClient extends Emitter {
   async uploadMedia(file: Blob, options: Omit<MediaUploadOptions, "sizeBytes" | "mimeType"> & {
     sizeBytes?: number; mimeType?: string;
   }): Promise<UploadSession> {
+    const declaredMime = options.mimeType?.trim() || file.type.trim();
+    const mimeType = declaredMime || (options.mediaType === "FILE" ? "application/octet-stream" : "");
     const session = this.normalizeUpload(await this.http<any>("POST", "/media/upload/init", {
       file_name: options.fileName, size_bytes: options.sizeBytes ?? file.size,
-      sha256: options.sha256, mime_type: options.mimeType ?? file.type,
+      sha256: options.sha256, mime_type: mimeType,
       media_type: options.mediaType, duration_seconds: options.durationSeconds,
       width: options.width, height: options.height, burn_after_read: options.burnAfterRead,
       burn_after_read_ttl_seconds: options.burnAfterReadTtlSeconds,

@@ -1,4 +1,4 @@
-import { PhantomClient } from '@phantom/sdk-web'
+import { PhantomAuthError, PhantomClient } from '@phantom/sdk-web'
 import type { PhantomToken, RuntimeConfig, SessionAccount } from '../api/types'
 import type { PhantomTokenManager } from '../auth/token-manager'
 
@@ -47,6 +47,8 @@ export class PhantomSdkAdapter {
   private client?: SdkClientLike
   private token?: PhantomToken
   private refreshInFlight?: Promise<PhantomToken>
+  private connectInFlight?: Promise<SdkClientLike>
+  private establishedConnection = false
 
   constructor(options: SdkAdapterOptions) {
     this.options = options
@@ -70,8 +72,16 @@ export class PhantomSdkAdapter {
     return this.client?.getState() ?? 'idle'
   }
 
-  async connect(token = this.token): Promise<SdkClientLike> {
-    if (!token) throw new Error('缺少 Phantom UserToken')
+  connect(token = this.token): Promise<SdkClientLike> {
+    if (!token) return Promise.reject(new Error('缺少 Phantom UserToken'))
+    if (this.connectInFlight) return this.connectInFlight
+    this.connectInFlight = this.connectInternal(token).finally(() => {
+      this.connectInFlight = undefined
+    })
+    return this.connectInFlight
+  }
+
+  private async connectInternal(token: PhantomToken): Promise<SdkClientLike> {
     this.token = token
     this.options.onDiagnostic?.('SDK 登录请求已发起')
     if (!this.client) {
@@ -83,8 +93,17 @@ export class PhantomSdkAdapter {
       })
       this.bindEvents()
     }
-    await this.login(token)
-    return this.client
+    try {
+      await this.login(token)
+      return this.client
+    } catch (error) {
+      if (error instanceof PhantomAuthError && error.code === 2001) {
+        await this.refreshToken()
+        if (!this.client) throw error
+        return this.client
+      }
+      throw error
+    }
   }
 
   async simulateTokenExpiry(expiredToken: PhantomToken): Promise<void> {
@@ -119,7 +138,7 @@ export class PhantomSdkAdapter {
       })
       .catch((error) => {
         this.options.onDiagnostic?.('Phantom Token 刷新失败', 'error')
-        this.options.onSessionExpired?.(error)
+        if (this.establishedConnection) this.options.onSessionExpired?.(error)
         throw error
       })
       .finally(() => {
@@ -133,6 +152,8 @@ export class PhantomSdkAdapter {
     this.client = undefined
     this.token = undefined
     this.refreshInFlight = undefined
+    this.connectInFlight = undefined
+    this.establishedConnection = false
     this.options.tokenManager.clear()
   }
 
@@ -144,6 +165,7 @@ export class PhantomSdkAdapter {
       deviceId: this.options.deviceId,
       deviceType: 'WEB',
     })
+    this.establishedConnection = true
   }
 
   private bindEvents(): void {

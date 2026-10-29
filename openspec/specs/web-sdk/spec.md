@@ -78,6 +78,11 @@ SDK SHALL 提供发送文本、表情、图片、语音、视频、文件、位�
 - **WHEN** 宿主调用图片发送 API 并完成分片上传
 - **THEN** SDK 发送携带 `media_id` 的消息并先展示发送中，再按响应更新状态
 
+#### Scenario: 普通文件 MIME 兜底
+- **WHEN** 宿主以 `FILE` 上传文件且显式 MIME 与 `Blob.type` 均为空或仅含空白
+- **THEN** SDK 使用 `application/octet-stream` 初始化上传；有效的显式 MIME 优先于 `Blob.type`，并保留宿主指定的媒体类型
+- **AND** 图片、语音、视频上传不使用普通文件的 MIME 兜底
+
 ### Requirement: 关系、资料与群组 API
 
 SDK SHALL 提供用户资料、好友申请、好友列表、备注、分组、黑名单、二维码名片、群创建、群成员、角色、禁言、公告、群名片和群邀请 API，并将对应同步事件更新到本地状态。

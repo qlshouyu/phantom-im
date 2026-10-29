@@ -24,5 +24,5 @@ public final class MediaDtos {
                            String url, String thumbUrl, Integer durationSeconds, Integer width,
                            Integer height, String fileName, String status) {}
 
-    public record MediaContent(byte[] bytes, String mimeType, String fileName) {}
+    public record MediaContent(byte[] bytes, String mimeType, String fileName, String mediaType) {}
 }

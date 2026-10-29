@@ -152,4 +152,45 @@ describe('AppBootMachine', () => {
       retryable: true,
     })
   })
+
+  it('恢复连接时 Token 接口未授权则回到登录页', async () => {
+    const tokenUnauthorized = new BffApiError({
+      message: 'Session 已失效',
+      code: 2003,
+      status: 401,
+      unauthorized: true,
+    })
+    const machine = new AppBootMachine({
+      bff: bff({ phantomToken: vi.fn(async () => { throw tokenUnauthorized }) }),
+      connect: vi.fn(),
+    })
+
+    await machine.start()
+
+    expect(machine.state).toMatchObject({
+      phase: 'unauthenticated',
+      error: tokenUnauthorized,
+      retryable: false,
+    })
+  })
+
+  it('重试成功进入 ready 后忽略旧连接迟到的 online 回调', async () => {
+    let staleOnline: ((state: string) => void) | undefined
+    const connect = vi.fn()
+      .mockImplementationOnce(async (context) => {
+        staleOnline = context.onConnectionState
+        throw new Error('首次连接失败')
+      })
+      .mockResolvedValueOnce({ id: 'new-connection' })
+    const machine = new AppBootMachine({ bff: bff(), connect })
+
+    await machine.start()
+    expect(machine.state.phase).toBe('error')
+    await machine.retry()
+    expect(machine.state.phase).toBe('ready')
+
+    staleOnline?.('online')
+    expect(machine.state.phase).toBe('ready')
+    expect(machine.currentConnection).toEqual({ id: 'new-connection' })
+  })
 })

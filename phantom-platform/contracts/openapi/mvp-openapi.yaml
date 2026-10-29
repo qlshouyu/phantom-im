@@ -144,7 +144,7 @@ paths:
     get: { summary: 群成员列表, responses: { "200": { description: OK } } }
     post: { summary: 邀请成员, responses: { "200": { description: OK } } }
     delete:
-      summary: 移出成员（query: user_id）
+      summary: "移出成员（query: user_id）"
       parameters:
         - { name: user_id, in: query, required: true, schema: { type: string } }
       responses: { "200": { description: OK } }
@@ -174,7 +174,15 @@ paths:
   /conversations/{convId}/search:
     get: { summary: 会话内搜索, responses: { "200": { description: OK } } }
   /media/upload/init:
-    post: { summary: 初始化上传, responses: { "200": { description: OK } } }
+    post:
+      summary: 初始化上传
+      description: >-
+        media_type 为 FILE 时允许任意后缀与合法的具体 MIME；mime_type 缺失或为空白时使用
+        application/octet-stream。IMAGE、VOICE、VIDEO 分别要求 image/、audio/、video/ 类型的具体 MIME。
+        所有文件最大 524288000 字节，VIDEO 最大 104857600 字节，VOICE 时长 1–60 秒。
+        媒体类型从初始化保留到完成；FILE 不执行图片或音视频处理。
+        秒传和续传需匹配当前应用、用户、摘要、文件名、大小、MIME、媒体类型及相应的阅后即焚策略。
+      responses: { "200": { description: OK } }
   /media/upload/{uploadId}/part/{partNumber}:
     put: { summary: 上传分片, responses: { "200": { description: OK } } }
   /media/upload/{uploadId}/complete:
@@ -226,7 +234,13 @@ paths:
   /messages/{msgId}:
     delete: { summary: 当前用户本地删除消息, responses: { "200": { description: OK } } }
   /media/{mediaId}/content:
-    get: { summary: 读取媒体内容, responses: { "200": { description: OK } } }
+    get:
+      summary: 读取媒体内容
+      description: >-
+        FILE 返回原始字节及 MIME，使用 Content-Disposition attachment 与 UTF-8 编码的原始文件名。
+        图片和缩略图预览不设置附件响应头。所有成功内容响应设置 X-Content-Type-Options nosniff。
+        Easy IM BFF 保留 Content-Disposition、X-Content-Type-Options 和 Cache-Control 响应头。
+      responses: { "200": { description: OK } }
   /search/suggest:
     get: { summary: 搜索联想, responses: { "200": { description: OK } } }
   /search/rebuild:

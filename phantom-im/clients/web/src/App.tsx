@@ -22,6 +22,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('chats')
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutBusy, setLogoutBusy] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [chatTarget, setChatTarget] = useState<ConversationTarget>()
   const { unreadTotal, markConversationRead, refreshUnread } = useUnreadBadge(connectionGateway)
 
@@ -85,7 +86,16 @@ export default function App() {
         phase="error"
         title="无法连接 Easy IM"
         detail={errorMessage(state.error)}
-        action={<button type="button" className="primary-button" onClick={() => void retry()}>重试</button>}
+        action={(
+          <button
+            type="button"
+            className="primary-button"
+            disabled={retrying}
+            onClick={() => void handleRetry()}
+          >
+            {retrying ? '正在重试…' : '重试'}
+          </button>
+        )}
       />
     )
   }
@@ -118,6 +128,16 @@ export default function App() {
     : adapter?.state === 'reconnecting'
       ? '重连中'
       : '连接中'
+
+  async function handleRetry() {
+    if (retrying) return
+    setRetrying(true)
+    try {
+      await retry()
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   async function confirmLogout() {
     setLogoutBusy(true)
@@ -244,6 +264,13 @@ function BootScreen({
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
+  if (error instanceof Error) {
+    const detail = error as Error & { code?: number; requestId?: string }
+    const diagnostics = [
+      detail.code ? `错误码 ${detail.code}` : '',
+      detail.requestId ? `request_id ${detail.requestId}` : '',
+    ].filter(Boolean)
+    return diagnostics.length > 0 ? `${error.message}（${diagnostics.join(' · ')}）` : error.message
+  }
   return '请检查 BFF、Phantom 与本地中间件是否已启动'
 }

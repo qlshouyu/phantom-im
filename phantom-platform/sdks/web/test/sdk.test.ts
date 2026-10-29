@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PhantomClient, singleConvId } from "../src";
+import { PhantomAuthError, PhantomClient, singleConvId } from "../src";
 import * as P from "../src/proto";
 
 const APP_ID = "app_test";
@@ -123,8 +123,10 @@ describe("PhantomClient", () => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws, 0, 2001);
     };
 
-    await expect(client.login({ userToken: "expired", userId: "u_bob", deviceId: "dev-1" }))
-      .rejects.toThrow("auth failed code=2001");
+    const error = await client.login({ userToken: "expired", userId: "u_bob", deviceId: "dev-1" })
+      .catch((reason) => reason);
+    expect(error).toBeInstanceOf(PhantomAuthError);
+    expect(error).toMatchObject({ code: 2001, message: "auth failed code=2001" });
     expect(expired).toHaveBeenCalledOnce();
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(10_000);
@@ -526,6 +528,34 @@ describe("PhantomClient", () => {
     expect(calls.filter((call) => call.path.includes("/part/")).map((call) => call.path))
       .toEqual(["/media/upload/upload_1/part/2", "/media/upload/upload_1/part/3"]);
     expect(progress).toEqual([4, 6]);
+  });
+
+  it.each([
+    { fileType: "application/json", explicit: undefined, kind: "FILE", expected: "application/json" },
+    { fileType: "", explicit: undefined, kind: "FILE", expected: "application/octet-stream" },
+    { fileType: "   ", explicit: "  ", kind: "FILE", expected: "application/octet-stream" },
+    { fileType: "application/json", explicit: "  ", kind: "FILE", expected: "application/json" },
+    { fileType: "text/plain", explicit: " application/json ", kind: "FILE", expected: "application/json" },
+    { fileType: "video/mp4", explicit: undefined, kind: "FILE", expected: "video/mp4" },
+    { fileType: "", explicit: undefined, kind: "IMAGE", expected: "" },
+  ] as const)("上传类型兜底：$kind / $fileType / $explicit", async ({ fileType, explicit, kind, expected }) => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) =>
+      Response.json({ code: 0, data: {
+        instant: true, mediaId: "media_file", uploadedParts: [],
+      } }));
+    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock as typeof fetch });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    await client.uploadMedia(new Blob(["{}"], { type: fileType }), {
+      fileName: "配置.json", sha256: "a".repeat(64), mediaType: kind, mimeType: explicit,
+    });
+    const init = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/media/upload/init"))?.[1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      file_name: "配置.json", mime_type: expected, media_type: kind,
+    });
   });
 
   it("按当前用户获取缩略图签名并使用认证头读取图片内容", async () => {

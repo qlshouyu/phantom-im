@@ -499,6 +499,10 @@ export default function ChatsView({
 
   async function handleFile(file: File, kind: 'IMAGE' | 'FILE') {
     if (!gateway || !active) return
+    if (file.size > 500 * 1024 * 1024) {
+      setNotice('文件超过 500MB，无法发送')
+      return
+    }
     const controller = new AbortController()
     setUploadController(controller)
     setUploadTask({ fileName: file.name, kind, progress: 0, status: 'uploading', file })

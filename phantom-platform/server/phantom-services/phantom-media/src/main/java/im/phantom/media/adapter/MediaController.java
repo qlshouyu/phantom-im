@@ -9,6 +9,7 @@ import im.phantom.media.app.MediaDtos.MediaContent;
 import im.phantom.media.app.MediaDtos.MediaDto;
 import im.phantom.media.app.MediaDtos.UploadPartDto;
 import im.phantom.media.app.MediaDtos.UploadSessionDto;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.charset.StandardCharsets;
 
 /** 媒体上传、完成和受控下载 API。 */
 @RestController
@@ -79,9 +82,14 @@ public class MediaController {
             @RequestAttribute(HttpAuthAttributes.APP_ID) String appId,
             @RequestAttribute(HttpAuthAttributes.USER_ID) String userId) {
         MediaContent content = media.content(appId, userId, mediaId, expiresAt, signature, variant);
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(content.mimeType()))
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=60")
-                .body(content.bytes());
+                .header("X-Content-Type-Options", "nosniff");
+        if ("FILE".equals(content.mediaType())) {
+            response.header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                    .filename(content.fileName(), StandardCharsets.UTF_8).build().toString());
+        }
+        return response.body(content.bytes());
     }
 }

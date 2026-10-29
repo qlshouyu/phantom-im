@@ -32,6 +32,7 @@ interface AppServices {
   machine: AppBootMachine<PhantomSdkAdapter>
   adapter?: PhantomSdkAdapter
   gateway?: PhantomGateway
+  connectionAttempt: number
   logs: DiagnosticEntry[]
   nextLogId: number
   onLogChanged?: () => void
@@ -67,6 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const services = {} as AppServices
     const bff = createBffClient({
       onSessionInvalid: () => {
+        services.connectionAttempt += 1
         services.adapter?.logout()
         services.adapter = undefined
         services.gateway = undefined
@@ -80,6 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
     services.bff = bff
     services.machine = machine
+    services.connectionAttempt = 0
     services.logs = []
     services.nextLogId = 1
     services.onLogChanged = () => setDiagnosticVersion((version) => version + 1)
@@ -115,6 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     retry: () => services.machine.retry(),
     logout: async () => {
       await services.machine.logout(async () => {
+        services.connectionAttempt += 1
         services.adapter?.logout()
         services.adapter = undefined
         services.gateway = undefined
@@ -156,9 +160,15 @@ async function connectServices(
   services: AppServices,
   context: BootConnectionContext,
 ): Promise<PhantomSdkAdapter> {
+  services.connectionAttempt += 1
+  const attempt = services.connectionAttempt
+  const isCurrentAttempt = () => services.connectionAttempt === attempt
+  services.adapter?.logout()
+  services.adapter = undefined
+  services.gateway = undefined
+
   const tokenManager = new PhantomTokenManager({
     bff: services.bff,
-    onRefreshFailed: (error) => services.machine.sessionExpired(error),
   })
   tokenManager.set(context.token)
   let adapter: PhantomSdkAdapter
@@ -168,9 +178,13 @@ async function connectServices(
     token: context.token,
     deviceId: getOrCreateDeviceId(),
     tokenManager,
-    onStateChange: (connectionState) => context.onConnectionState?.(connectionState),
+    onStateChange: (connectionState) => {
+      if (isCurrentAttempt()) context.onConnectionState?.(connectionState)
+    },
     onSessionExpired: (error) => {
+      if (!isCurrentAttempt()) return
       adapter.logout()
+      services.connectionAttempt += 1
       services.adapter = undefined
       services.gateway = undefined
       appendLog(services, 'Token 刷新失败，返回登录页', 'error')
@@ -178,14 +192,25 @@ async function connectServices(
     },
     onDiagnostic: (message, level) => appendLog(services, message, level),
     onKicked: (reason) => {
+      if (!isCurrentAttempt()) return
       adapter.logout()
+      services.connectionAttempt += 1
       services.adapter = undefined
       services.gateway = undefined
       appendLog(services, `连接被顶替：${reason}`, 'warn')
       services.machine.kicked(reason)
     },
   })
-  await adapter.connect(context.token)
+  try {
+    await adapter.connect(context.token)
+  } catch (error) {
+    adapter.logout()
+    throw error
+  }
+  if (!isCurrentAttempt()) {
+    adapter.logout()
+    throw new Error('连接尝试已被新的请求替代')
+  }
   services.adapter = adapter
   services.gateway = new PhantomGateway(adapter.rawClient)
   appendLog(services, 'SDK 连接与初始同步完成')

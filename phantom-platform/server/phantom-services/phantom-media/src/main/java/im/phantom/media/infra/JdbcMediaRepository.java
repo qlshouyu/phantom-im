@@ -16,25 +16,25 @@ public class JdbcMediaRepository {
         this.jdbc = jdbc;
     }
 
-    public Optional<MediaRecord> findReusable(String appId, String ownerId, String sha256) {
+    public List<MediaRecord> findReusableCandidates(String appId, String ownerId, String sha256) {
         return jdbc.query("""
                 SELECT media_id, app_id, owner_id, storage_key, sha256, mime_type, size_bytes, media_type,
                        thumb_key, metadata_json, burn_after_read, status, created_at, expires_at
                 FROM media_object WHERE app_id=? AND owner_id=? AND sha256=? AND status='READY'
-                  AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at LIMIT 1
-                """, rs -> rs.next() ? Optional.of(mapMedia(rs)) : Optional.empty(),
+                  AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at
+                """, (rs, row) -> mapMedia(rs),
                 appId, ownerId, sha256, System.currentTimeMillis());
     }
 
-    public Optional<UploadRecord> findResumable(String appId, String ownerId, String sha256) {
+    public List<UploadRecord> findResumableCandidates(String appId, String ownerId, String sha256) {
         return jdbc.query("""
                 SELECT upload_id, app_id, owner_id, file_name, sha256, mime_type, size_bytes, part_size,
                        status, media_id, metadata_json, burn_after_read, burn_ttl_seconds,
                        created_at, updated_at, expires_at
                 FROM media_upload WHERE app_id=? AND owner_id=? AND sha256=?
                   AND status IN ('INIT','UPLOADING') AND expires_at>?
-                ORDER BY created_at DESC LIMIT 1
-                """, rs -> rs.next() ? Optional.of(mapUpload(rs)) : Optional.empty(), appId, ownerId, sha256,
+                ORDER BY created_at DESC
+                """, (rs, row) -> mapUpload(rs), appId, ownerId, sha256,
                 System.currentTimeMillis());
     }
 

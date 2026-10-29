@@ -25,6 +25,9 @@ public class ProxyController {
     private static final Set<String> FORWARD_HEADERS = Set.of(
             "authorization", "accept", "content-type", "user-agent", "x-device-id");
 
+    private static final Set<String> FORWARD_RESPONSE_HEADERS = Set.of(
+            "Content-Disposition", "X-Content-Type-Options", "Cache-Control");
+
     private final ProxyPathPolicy pathPolicy;
     private final SessionSupport sessions;
     private final WebImProperties properties;
@@ -73,6 +76,8 @@ public class ProxyController {
             if (contentType != null) {
                 result.contentType(mediaType(contentType));
             }
+            FORWARD_RESPONSE_HEADERS.forEach(name -> response.headers().firstValue(name)
+                    .ifPresent(value -> result.header(name, value)));
             String requestId = response.headers().firstValue("X-Request-Id")
                     .orElse(String.valueOf(request.getAttribute(RequestIdFilter.ATTRIBUTE)));
             result.header("X-Request-Id", requestId);

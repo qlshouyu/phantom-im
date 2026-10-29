@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { PhantomAuthError } from '@phantom/sdk-web'
 import type { PhantomToken, RuntimeConfig, SessionAccount } from '../api/types'
 import { PhantomSdkAdapter, type SdkClientLike } from './sdk-adapter'
 
@@ -93,6 +94,54 @@ describe('PhantomSdkAdapter', () => {
       userToken: 'token_2',
       userId: 'user_1',
     }))
+  })
+
+  it('首次连接遇到 Token 过期时等待刷新和重新登录完成', async () => {
+    const fake = fakeClient()
+    const nextToken = { ...token, userToken: 'token_2' }
+    fake.login.mockImplementationOnce(async () => {
+      fake.handlers.get('tokenExpired')?.()
+      throw new PhantomAuthError(2001)
+    })
+    const refresh = vi.fn(async () => nextToken)
+    const onSessionExpired = vi.fn()
+    const adapter = new PhantomSdkAdapter({
+      runtime,
+      account,
+      deviceId: 'device_1',
+      token,
+      tokenManager: { refresh, clear: vi.fn() },
+      createClient: () => fake.client,
+      onSessionExpired,
+    })
+
+    await expect(adapter.connect()).resolves.toBe(fake.client)
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(fake.login).toHaveBeenCalledTimes(2)
+    expect(fake.login).toHaveBeenLastCalledWith(expect.objectContaining({ userToken: 'token_2' }))
+    expect(onSessionExpired).not.toHaveBeenCalled()
+  })
+
+  it('首次连接刷新失败时交给启动状态机分类，不提前通知会话失效', async () => {
+    const fake = fakeClient()
+    const refreshError = new Error('refresh failed')
+    fake.login.mockImplementationOnce(async () => {
+      fake.handlers.get('tokenExpired')?.()
+      throw new PhantomAuthError(2001)
+    })
+    const onSessionExpired = vi.fn()
+    const adapter = new PhantomSdkAdapter({
+      runtime,
+      account,
+      deviceId: 'device_1',
+      token,
+      tokenManager: { refresh: vi.fn(async () => { throw refreshError }), clear: vi.fn() },
+      createClient: () => fake.client,
+      onSessionExpired,
+    })
+
+    await expect(adapter.connect()).rejects.toBe(refreshError)
+    expect(onSessionExpired).not.toHaveBeenCalled()
   })
 
   it('刷新失败通知应用回到登录页', async () => {

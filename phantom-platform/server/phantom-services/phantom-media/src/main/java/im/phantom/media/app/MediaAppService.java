@@ -17,6 +17,7 @@ import im.phantom.media.infra.JdbcMediaRepository.UploadRecord;
 import im.phantom.media.spi.MediaStorage;
 import im.phantom.media.ffmpeg.FfmpegMediaProbe;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,13 +42,6 @@ public class MediaAppService {
     private static final long VIDEO_MAX = 100 * MB;
     private static final int VOICE_MAX_SECONDS = 60;
     private static final Set<String> MEDIA_TYPES = Set.of("IMAGE", "VOICE", "VIDEO", "FILE");
-    private static final Set<String> FILE_MIME_TYPES = Set.of(
-            "application/pdf", "application/zip", "application/x-7z-compressed",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
-            "text/plain", "application/octet-stream");
 
     private final JdbcMediaRepository repository;
     private final MediaStorage storage;
@@ -85,9 +79,13 @@ public class MediaAppService {
         ValidatedUpload upload = validateInit(request);
         String sha = normalizeSha(request.sha256());
         if (!upload.burnAfterRead()) {
-            var reusable = repository.findReusable(appId, userId, sha)
+            var reusable = repository.findReusableCandidates(appId, userId, sha).stream()
                     .filter(media -> media.sizeBytes() == request.sizeBytes()
-                            && media.mimeType().equalsIgnoreCase(upload.mimeType()));
+                            && media.mimeType().equalsIgnoreCase(upload.mimeType())
+                            && media.mediaType().equals(upload.mediaType())
+                            && !media.burnAfterRead()
+                            && upload.fileName().equals(readMetadata(media.metadataJson()).get("fileName")))
+                    .findFirst();
             if (reusable.isPresent()) {
                 MediaRecord media = reusable.get();
                 return new UploadSessionDto(media.mediaId(), 0, media.sizeBytes(), 0, List.of(),
@@ -96,7 +94,14 @@ public class MediaAppService {
             }
         }
         long now = System.currentTimeMillis();
-        UploadRecord existing = repository.findResumable(appId, userId, sha).orElse(null);
+        UploadRecord existing = repository.findResumableCandidates(appId, userId, sha).stream()
+                .filter(candidate -> candidate.sizeBytes() == request.sizeBytes()
+                        && candidate.mimeType().equalsIgnoreCase(upload.mimeType())
+                        && uploadMediaType(candidate).equals(upload.mediaType())
+                        && candidate.fileName().equals(upload.fileName())
+                        && candidate.burnAfterRead() == upload.burnAfterRead()
+                        && candidate.burnTtlSeconds() == upload.burnTtlSeconds())
+                .findFirst().orElse(null);
         if (existing != null) {
             return session(existing, repository.uploadedParts(existing.uploadId()), false, null, null, null);
         }
@@ -174,7 +179,7 @@ public class MediaAppService {
         long expiresAt = now + (upload.burnAfterRead() ? Math.max(1, upload.burnTtlSeconds())
                 : properties.getUnboundMediaTtlSeconds()) * 1000L;
         MediaRecord media = new MediaRecord(mediaId, appId, userId, storageKey, upload.sha256(),
-                upload.mimeType(), upload.sizeBytes(), mediaType(upload.mimeType()), thumbKey,
+                upload.mimeType(), upload.sizeBytes(), uploadMediaType(upload), thumbKey,
                 metadataJson, upload.burnAfterRead(), "READY", now, expiresAt);
         repository.insertMedia(media);
         repository.completeUpload(uploadId, mediaId, now);
@@ -206,9 +211,11 @@ public class MediaAppService {
             if (media.thumbKey() == null) {
                 throw new BizException(ErrorCodes.INVALID_PARAM, "媒体缩略图不存在");
             }
-            return new MediaContent(storage.read(media.thumbKey()), "image/jpeg", "thumbnail.jpg");
+            return new MediaContent(storage.read(media.thumbKey()), "image/jpeg", "thumbnail.jpg", "IMAGE");
         }
-        return new MediaContent(storage.read(media.storageKey()), media.mimeType(), media.mimeType());
+        Object fileName = readMetadata(media.metadataJson()).get("fileName");
+        return new MediaContent(storage.read(media.storageKey()), media.mimeType(),
+                fileName instanceof String name && !name.isBlank() ? name : media.mediaId(), media.mediaType());
     }
 
     @Scheduled(fixedDelayString = "${phantom.media.cleanup-interval-ms:60000}")
@@ -261,14 +268,14 @@ public class MediaAppService {
 
     private ValidatedUpload validateInit(InitUploadRequest request) {
         if (request == null || request.fileName() == null || request.fileName().isBlank()
-                || request.sizeBytes() <= 0 || request.mimeType() == null || request.mimeType().isBlank()) {
+                || request.sizeBytes() <= 0) {
             throw new BizException(ErrorCodes.INVALID_PARAM, "上传参数不完整");
         }
         String mediaType = request.mediaType() == null ? "FILE" : request.mediaType().toUpperCase(Locale.ROOT);
         if (!MEDIA_TYPES.contains(mediaType)) {
             throw new BizException(ErrorCodes.INVALID_PARAM, "不支持的媒体类型");
         }
-        String mime = request.mimeType().toLowerCase(Locale.ROOT);
+        String mime = normalizeMime(request.mimeType(), mediaType);
         if (request.sizeBytes() > FILE_MAX) {
             throw new BizException(ErrorCodes.MEDIA_TOO_LARGE, "文件超过 500MB");
         }
@@ -288,11 +295,9 @@ public class MediaAppService {
         if ("VIDEO".equals(mediaType) && !mime.startsWith("video/")) {
             throw new BizException(ErrorCodes.INVALID_PARAM, "视频 MIME 非法");
         }
-        if ("FILE".equals(mediaType) && !(FILE_MIME_TYPES.contains(mime) || mime.startsWith("text/"))) {
-            throw new BizException(ErrorCodes.INVALID_PARAM, "文件 MIME 非法");
-        }
         Map<String, Object> metadata = Map.of(
                 "fileName", request.fileName(),
+                "mediaType", mediaType,
                 "extension", extension(request.fileName()),
                 "durationSeconds", request.durationSeconds() == null ? 0 : request.durationSeconds(),
                 "width", request.width() == null ? 0 : request.width(),
@@ -328,7 +333,7 @@ public class MediaAppService {
     }
 
     private String thumbnail(String sourceKey, UploadRecord upload, byte[] content) {
-        if (upload.mimeType().startsWith("video/") && mediaProbe != null) {
+        if ("VIDEO".equals(uploadMediaType(upload)) && mediaProbe != null) {
             return mediaProbe.videoThumbnail(content, extension(upload.fileName()))
                     .map(bytes -> {
                         String key = sourceKey + ".thumb.jpg";
@@ -336,7 +341,7 @@ public class MediaAppService {
                         return key;
                     }).orElse(null);
         }
-        if (!upload.mimeType().startsWith("image/")) {
+        if (!"IMAGE".equals(uploadMediaType(upload))) {
             return null;
         }
         return imageProcessor.thumbnail(content, 320).map(bytes -> {
@@ -353,7 +358,7 @@ public class MediaAppService {
         });
         metadata.put("sizeBytes", upload.sizeBytes());
         metadata.put("mimeType", upload.mimeType());
-        if (upload.mimeType().startsWith("image/")) {
+        if ("IMAGE".equals(uploadMediaType(upload))) {
             imageProcessor.dimensions(content).ifPresentOrElse(dimensions -> {
                 metadata.put("width", dimensions[0]);
                 metadata.put("height", dimensions[1]);
@@ -364,8 +369,8 @@ public class MediaAppService {
             });
             return json(metadata);
         }
-        if (mediaProbe != null && (upload.mimeType().startsWith("video/")
-                || upload.mimeType().startsWith("audio/"))) {
+        if (mediaProbe != null && ("VIDEO".equals(uploadMediaType(upload))
+                || "VOICE".equals(uploadMediaType(upload)))) {
             mediaProbe.probe(content, extension).ifPresent(probe -> {
                 if (probe.width() != null) metadata.put("width", probe.width());
                 if (probe.height() != null) metadata.put("height", probe.height());
@@ -414,6 +419,33 @@ public class MediaAppService {
         }
         String ext = fileName.substring(dot).toLowerCase(Locale.ROOT);
         return ext.matches("\\.[a-z0-9]{1,10}") ? ext : "";
+    }
+
+    private String normalizeMime(String value, String mediaType) {
+        if (value == null || value.isBlank()) {
+            if ("FILE".equals(mediaType)) return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            throw new BizException(ErrorCodes.INVALID_PARAM, "请提供媒体内容类型");
+        }
+        try {
+            // MIME 仅用于描述内容；普通附件不按类型或后缀限制格式。
+            if (value.chars().anyMatch(character -> Character.isISOControl(character))) {
+                throw new IllegalArgumentException("control character");
+            }
+            MediaType parsed = MediaType.parseMediaType(value.trim());
+            if (parsed.isWildcardType() || parsed.isWildcardSubtype()) {
+                throw new IllegalArgumentException("wildcard");
+            }
+            return parsed.toString();
+        } catch (IllegalArgumentException error) {
+            throw new BizException(ErrorCodes.INVALID_PARAM, "文件内容类型格式不正确");
+        }
+    }
+
+    private String uploadMediaType(UploadRecord upload) {
+        Object declared = readMetadata(upload.metadataJson()).get("mediaType");
+        if (declared instanceof String type && MEDIA_TYPES.contains(type)) return type;
+        // 兼容升级前已创建的上传会话，沿用旧版按 MIME 推导的类型。
+        return mediaType(upload.mimeType());
     }
 
     private String mediaType(String mime) {
