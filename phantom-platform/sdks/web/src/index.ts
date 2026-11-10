@@ -168,11 +168,20 @@ export class PhantomClient extends Emitter {
   private persistPending = false;
   private readonly pagehideHandler = () => this.flushPersistence();
 
-  constructor(options: { url: string; appId: string; httpBaseUrl?: string; fetch?: typeof fetch }) {
+  constructor(options: { baseUrl: string; appId: string; fetch?: typeof fetch }) {
     super();
-    this.wsUrl = options.url;
+    const baseUrl = new URL(options.baseUrl);
+    if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") {
+      throw new TypeError("baseUrl 必须是 HTTP 或 HTTPS 地址");
+    }
+    if (baseUrl.search || baseUrl.hash) {
+      throw new TypeError("baseUrl 不能包含查询参数或片段");
+    }
+    this.httpBaseUrl = baseUrl.href.replace(/\/+$/, "");
+    baseUrl.protocol = baseUrl.protocol === "https:" ? "wss:" : "ws:";
+    baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/, "")}/ws`;
+    this.wsUrl = baseUrl.href;
     this.appId = options.appId;
-    this.httpBaseUrl = options.httpBaseUrl ?? options.url.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("pagehide", this.pagehideHandler);

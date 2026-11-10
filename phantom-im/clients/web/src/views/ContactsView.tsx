@@ -1115,7 +1115,7 @@ function BlacklistModal({ open, entries, onClose, onUnblock }: { open: boolean; 
           <div className="device-row" key={entry.id}>
             <Avatar chars={[entry.name.slice(-1)]} tone="coral" size={36} />
             <div><strong>{entry.name}</strong><small>@{entry.id}</small></div>
-            <button type="button" disabled={busyId === entry.id} onClick={() => {
+            <button type="button" className="is-positive" disabled={busyId === entry.id} onClick={() => {
               setBusyId(entry.id)
               void onUnblock(entry.id).finally(() => setBusyId(''))
             }}>{busyId === entry.id ? '处理中…' : '解除拉黑'}</button>
@@ -1134,7 +1134,7 @@ function FriendGroupsModal({ open, groups, onClose, onCreate, onRename, onDelete
     <Modal open={open} title="好友分组" description="创建、重命名或删除真实好友分组" onClose={onClose}>
       <div className="modal-form">
         <div className="inline-search"><input value={name} placeholder="新分组名称" onChange={(event) => setName(event.target.value)} /><button type="button" className="primary-button" disabled={!name.trim()} onClick={() => void onCreate(name.trim()).then(() => setName(''))}>创建</button></div>
-        <div className="friend-group-manage-list">{groups.map((group) => <div key={group.id}>{editingId === group.id ? <input autoFocus value={editingName} onChange={(event) => setEditingName(event.target.value)} /> : <strong>{group.name}</strong>}<small>{group.memberCount} 位好友</small>{editingId === group.id ? <><button type="button" onClick={() => void onRename(group.id, editingName).then(() => setEditingId(''))}>保存</button><button type="button" onClick={() => setEditingId('')}>取消</button></> : <><button type="button" onClick={() => { setEditingId(group.id); setEditingName(group.name) }}>重命名</button><button type="button" onClick={() => void onDelete(group.id)}>删除</button></>}</div>)}</div>
+        <div className="friend-group-manage-list">{groups.map((group) => <div key={group.id}>{editingId === group.id ? <input autoFocus value={editingName} onChange={(event) => setEditingName(event.target.value)} /> : <strong>{group.name}</strong>}<small>{group.memberCount} 位好友</small>{editingId === group.id ? <><button type="button" className="is-positive" onClick={() => void onRename(group.id, editingName).then(() => setEditingId(''))}>保存</button><button type="button" onClick={() => setEditingId('')}>取消</button></> : <><button type="button" onClick={() => { setEditingId(group.id); setEditingName(group.name) }}>重命名</button><button type="button" className="is-danger" onClick={() => void onDelete(group.id)}>删除</button></>}</div>)}</div>
       </div>
     </Modal>
   )

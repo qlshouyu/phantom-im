@@ -1,5 +1,6 @@
 import { singleConvId } from '@phantom/sdk-web'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useApp } from '../app/AppProvider'
 import { LatestRequestTracker } from '../app/LatestRequestTracker'
 import { CountBadge } from '../components/CountBadge'
@@ -24,6 +25,11 @@ interface ChatsViewProps {
 }
 
 type ChatFilter = 'all' | 'unread'
+
+interface MessageMenuAnchor {
+  x: number
+  y: number
+}
 
 interface UploadTask {
   fileName: string
@@ -60,7 +66,7 @@ export default function ChatsView({
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
   const [searching, setSearching] = useState(false)
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
-  const [messageMenu, setMessageMenu] = useState<ChatMessage | null>(null)
+  const [messageMenu, setMessageMenu] = useState<(MessageMenuAnchor & { message: ChatMessage }) | null>(null)
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null)
   const [deleteConversationId, setDeleteConversationId] = useState('')
   const [chatSearchOpen, setChatSearchOpen] = useState(false)
@@ -75,6 +81,7 @@ export default function ChatsView({
   const [previewImage, setPreviewImage] = useState<ChatMessage | null>(null)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
 
+  const messageMenuRef = useRef<HTMLDivElement>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
   const messageScrollRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -177,6 +184,27 @@ export default function ChatsView({
       })
       .finally(() => inFlightReads.current.delete(operationKey))
   }, [gateway, onConversationRead, onUnreadRefresh, scheduleConversationRefresh])
+
+  useLayoutEffect(() => {
+    if (!messageMenu || !messageMenuRef.current) return
+    const { width, height } = messageMenuRef.current.getBoundingClientRect()
+    const x = Math.max(8, Math.min(messageMenu.x, window.innerWidth - width - 8))
+    const y = Math.max(8, Math.min(messageMenu.y, window.innerHeight - height - 8))
+    if (x !== messageMenu.x || y !== messageMenu.y) {
+      setMessageMenu({ ...messageMenu, x, y })
+    }
+  }, [messageMenu])
+
+  useEffect(() => {
+    if (!messageMenu) return
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !messageMenuRef.current?.contains(event.target)) {
+        setMessageMenu(null)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [messageMenu])
 
   useEffect(() => {
     if (!gateway) {
@@ -570,7 +598,7 @@ export default function ChatsView({
 
   async function runMessageAction(action: 'reply' | 'forward' | 'recall' | 'delete' | 'copy') {
     if (!gateway || !messageMenu) return
-    const message = messageMenu
+    const message = messageMenu.message
     setMessageMenu(null)
     try {
       if (action === 'reply') {
@@ -914,7 +942,7 @@ export default function ChatsView({
                     message={message}
                     group={active.kind === 'group'}
                     highlight={message.convSeq === highlightSeq}
-                    onMenu={() => setMessageMenu(message)}
+                    onMenu={(anchor) => setMessageMenu({ message, x: anchor.x + 4, y: anchor.y + 4 })}
                     onRetry={() => void retryMessage(message)}
                     onOpenImage={() => setPreviewImage(message)}
                     loadMedia={loadMedia}
@@ -1034,15 +1062,20 @@ export default function ChatsView({
         </footer>
       </section>
 
-      {messageMenu && (
-        <div className="action-menu action-menu--floating" role="menu">
+      {messageMenu && createPortal(
+        <div
+          ref={messageMenuRef}
+          className="action-menu action-menu--floating"
+          role="menu"
+          style={{ left: messageMenu.x, top: messageMenu.y }}
+        >
           <button type="button" role="menuitem" onClick={() => void runMessageAction('reply')}>
             <Icon name="message" size={15} />引用回复
           </button>
           <button type="button" role="menuitem" onClick={() => void runMessageAction('forward')}>
             <Icon name="arrowRight" size={15} />转发
           </button>
-          {messageMenu.from === 'me' && !messageMenu.recalled && (
+          {messageMenu.message.from === 'me' && !messageMenu.message.recalled && (
             <button type="button" role="menuitem" onClick={() => void runMessageAction('recall')}>
               <Icon name="refresh" size={15} />撤回
             </button>
@@ -1054,7 +1087,8 @@ export default function ChatsView({
             <Icon name="trash" size={15} />本地删除
           </button>
           <button type="button" className="action-menu-close" onClick={() => setMessageMenu(null)}>关闭</button>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <Modal open={newChatOpen} title="发起新会话" description="从真实好友中选择聊天对象" onClose={() => setNewChatOpen(false)} width={430}>
@@ -1159,7 +1193,7 @@ function MessageBubble({
   message: ChatMessage
   group: boolean
   highlight: boolean
-  onMenu: () => void
+  onMenu: (anchor: MessageMenuAnchor) => void
   onRetry: () => void
   onOpenImage: () => void
   loadMedia: MediaBlobLoader
@@ -1172,7 +1206,7 @@ function MessageBubble({
       data-conv-seq={message.convSeq || undefined}
       onContextMenu={(event) => {
         event.preventDefault()
-        onMenu()
+        onMenu({ x: event.clientX, y: event.clientY })
       }}
     >
       {!mine && message.from !== 'system' && <Avatar chars={[author.slice(-1)]} tone="sage" size={34} />}
@@ -1225,7 +1259,12 @@ function MessageBubble({
               {message.state === 'recalled' && '已撤回'}
             </span>
           )}
-          <button type="button" className="message-more" aria-label="消息操作" onClick={onMenu}>
+          <button type="button" className="message-more" aria-label="消息操作" onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            onMenu(event.detail === 0
+              ? { x: rect.left, y: rect.bottom }
+              : { x: event.clientX, y: event.clientY })
+          }}>
             <Icon name="more" size={14} />
           </button>
         </div>

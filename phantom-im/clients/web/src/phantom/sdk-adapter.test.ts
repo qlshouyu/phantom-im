@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-import { PhantomAuthError } from '@phantom/sdk-web'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PhantomAuthError, type PhantomClient } from '@phantom/sdk-web'
 import type { PhantomToken, RuntimeConfig, SessionAccount } from '../api/types'
 import { PhantomSdkAdapter, type SdkClientLike } from './sdk-adapter'
+
+type ClientOptions = ConstructorParameters<typeof PhantomClient>[0]
 
 const runtime: RuntimeConfig = {
   appId: 'app_test',
@@ -41,9 +43,11 @@ function fakeClient() {
 }
 
 describe('PhantomSdkAdapter', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('使用运行时配置与同源代理构造 SDK，并传入正确的登录参数', async () => {
     const fake = fakeClient()
-    const createClient = vi.fn(() => fake.client)
+    const createClient = vi.fn((_options: ClientOptions) => fake.client)
     const adapter = new PhantomSdkAdapter({
       runtime,
       account,
@@ -56,9 +60,9 @@ describe('PhantomSdkAdapter', () => {
     await adapter.connect()
 
     expect(createClient).toHaveBeenCalledWith({
-      url: 'ws://127.0.0.1:28080/ws',
+      baseUrl: 'http://127.0.0.1:28080',
       appId: 'app_test',
-      httpBaseUrl: '/api/phantom',
+      fetch: expect.any(Function),
     })
     expect(fake.login).toHaveBeenCalledWith({
       userToken: 'token_1',
@@ -66,6 +70,37 @@ describe('PhantomSdkAdapter', () => {
       deviceId: 'device_1',
       deviceType: 'WEB',
     })
+  })
+
+  it('HTTP 代理保留路径、签名参数、认证头、请求体和取消信号', async () => {
+    const fake = fakeClient()
+    let options!: ClientOptions
+    const adapter = new PhantomSdkAdapter({
+      runtime: { ...runtime, wsUrl: 'wss://platform.test/gateway/ws', proxyBaseUrl: '/api/phantom/' },
+      account,
+      deviceId: 'device_1',
+      token,
+      tokenManager: { refresh: vi.fn(), clear: vi.fn() },
+      createClient: (input) => { options = input; return fake.client },
+    })
+    await adapter.connect()
+    expect(options.baseUrl).toBe('https://platform.test/gateway')
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ code: 0, data: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    await options.fetch!(`${options.baseUrl}/media/media_1/content?signature=test`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer token_1', 'X-App-Id': runtime.appId },
+      body: 'content',
+      signal: controller.signal,
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/phantom/media/media_1/content?signature=test')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token_1')
+    expect(new Headers(init?.headers).get('X-App-Id')).toBe(runtime.appId)
+    expect(init?.body).toBe('content')
+    expect(init?.signal).toBe(controller.signal)
   })
 
   it('并发 tokenExpired 单飞刷新并用新 Token 重登录', async () => {

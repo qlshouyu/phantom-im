@@ -2,6 +2,8 @@
 
 > 对应变更：`implement-mvp-p0-p1`。所有响应统一使用 `ApiResponse<T>`。
 
+第三方客户端接入请先阅读 [SDK 接入文档](../sdk/README.md)，方法参数、返回模型与 HTTP / WebSocket 映射见 [JS SDK API 参考](../sdk/integration.html#js-api)。本页也包含尚未封装为 SDK 方法的平台路由。
+
 | 领域 | 方法 | 路径 | 用途 |
 |---|---|---|---|
 | 应用 | POST | `/openapi/apps` | 创建应用并返回一次性 AppSecret |

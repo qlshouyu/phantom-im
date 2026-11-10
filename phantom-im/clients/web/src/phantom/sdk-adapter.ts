@@ -26,11 +26,7 @@ export interface SdkAdapterOptions {
   deviceId: string
   tokenManager: Pick<PhantomTokenManager, 'refresh' | 'clear'>
   token?: PhantomToken
-  createClient?: (options: {
-    url: string
-    appId: string
-    httpBaseUrl: string
-  }) => SdkClientLike
+  createClient?: (options: ConstructorParameters<typeof PhantomClient>[0]) => SdkClientLike
   onStateChange?: (state: ConnectionState) => void
   onKicked?: (reason: string) => void
   onSessionExpired?: (error: unknown) => void
@@ -86,10 +82,23 @@ export class PhantomSdkAdapter {
     this.options.onDiagnostic?.('SDK 登录请求已发起')
     if (!this.client) {
       const factory = this.options.createClient ?? ((input) => new PhantomClient(input) as unknown as SdkClientLike)
+      const serviceUrl = new URL(this.options.runtime.wsUrl)
+      serviceUrl.protocol = serviceUrl.protocol === 'wss:' ? 'https:' : 'http:'
+      serviceUrl.pathname = serviceUrl.pathname.replace(/\/ws\/?$/, '')
+      const baseUrl = serviceUrl.href.replace(/\/+$/, '')
       this.client = factory({
-        url: this.options.runtime.wsUrl,
+        baseUrl,
         appId: this.options.runtime.appId,
-        httpBaseUrl: '/api/phantom',
+        // Easy IM 的 HTTP 请求经 BFF 代理，WebSocket 继续直连平台。
+        fetch: (input, init) => {
+          const url = input instanceof Request ? input.url : String(input)
+          const proxyBaseUrl = this.options.runtime.proxyBaseUrl.replace(/\/+$/, '')
+          const proxyUrl = `${proxyBaseUrl}${url.slice(baseUrl.length)}`
+          const request = input instanceof Request
+            ? new Request(new URL(proxyUrl, window.location.href), input)
+            : proxyUrl
+          return globalThis.fetch(request, init)
+        },
       })
       this.bindEvents()
     }

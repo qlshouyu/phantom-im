@@ -1,0 +1,131 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram id="客户端 SDK 分层架构（目标设计）" name="客户端 SDK 分层架构（目标设计）">
+    <mxGraphModel dx="1720" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1720" pageHeight="1390" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="overview.title" value="Phantom 客户端 SDK · 分层架构" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;fillColor=none;strokeColor=none;align=left;spacing=0;fontSize=32;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="25" width="1600" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="overview.subtitle" value="目标设计 · 2026-11-09  |  JS 独立实现；非 JS 客户端共享同一 Rust Kernel" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;fillColor=none;strokeColor=none;align=left;spacing=0;fontSize=18;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="60" y="82" width="1600" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="host.native" value="&lt;b&gt;第三方原生与跨平台应用&lt;/b&gt;&lt;br&gt;应用 UI / 业务账号 / UserToken 获取 / 页面状态" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="145" width="1180" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="host.browser" value="&lt;b&gt;浏览器应用&lt;/b&gt;&lt;br&gt;React / Vue / Flutter Web" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="145" width="360" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="layer.api" value="L1  平台 API" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;swimlane;rounded=0;startSize=34;collapsible=0;container=1;align=left;spacingLeft=16;spacingTop=0;fontSize=17;fontStyle=1;swimlaneFillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="275" width="1180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="wrapper.android" value="&lt;b&gt;Android SDK&lt;/b&gt;&lt;br&gt;Kotlin · suspend / Flow" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.api">
+          <mxGeometry x="20" y="52" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="app.to.android" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.13135593220338984;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="host.native" target="wrapper.android">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wrapper.ios" value="&lt;b&gt;iOS SDK&lt;/b&gt;&lt;br&gt;Swift · async / AsyncStream" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.api">
+          <mxGeometry x="310" y="52" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="app.to.ios" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.3771186440677966;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="host.native" target="wrapper.ios">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wrapper.flutter" value="&lt;b&gt;Flutter SDK&lt;/b&gt;&lt;br&gt;Dart · Future / Stream" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.api">
+          <mxGeometry x="600" y="52" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="app.to.flutter" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.6228813559322034;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="host.native" target="wrapper.flutter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wrapper.desktop" value="&lt;b&gt;桌面 SDK&lt;/b&gt;&lt;br&gt;Rust / Tauri；其他端可扩展" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.api">
+          <mxGeometry x="890" y="52" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="app.to.desktop" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.8686440677966102;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="host.native" target="wrapper.desktop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="layer.bindings" value="L2  桥接" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;swimlane;rounded=0;startSize=34;collapsible=0;container=1;align=left;spacingLeft=16;spacingTop=0;fontSize=17;fontStyle=1;swimlaneFillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="465" width="1180" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.uniffi" value="&lt;b&gt;UniFFI&lt;/b&gt;&lt;br&gt;生成 Kotlin / Swift 绑定" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.bindings">
+          <mxGeometry x="20" y="51" width="560" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.dart" value="&lt;b&gt;flutter_rust_bridge&lt;/b&gt;&lt;br&gt;Dart FFI 直接连接 Rust" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.bindings">
+          <mxGeometry x="600" y="51" width="270" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.desktop" value="&lt;b&gt;Rust API / 宿主桥接&lt;/b&gt;&lt;br&gt;Tauri IPC；C ABI 按需扩展" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.bindings">
+          <mxGeometry x="890" y="51" width="270" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="android.binding" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.24107142857142858;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="wrapper.android" target="binding.uniffi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ios.binding" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7589285714285714;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="wrapper.ios" target="binding.uniffi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flutter.binding" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="wrapper.flutter" target="binding.dart">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="desktop.binding" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="wrapper.desktop" target="binding.desktop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="layer.facade" value="L3  Rust Facade" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;swimlane;rounded=0;startSize=34;collapsible=0;container=1;align=left;spacingLeft=16;spacingTop=0;fontSize=17;fontStyle=1;swimlaneFillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="640" width="1180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="rust.facade" value="&lt;b&gt;统一领域 API · 客户端生命周期 · 类型化命令 / 结果 / 事件&lt;/b&gt;&lt;br&gt;一个进程内共享运行时；每个客户端实例拥有独立账号会话与状态" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.facade">
+          <mxGeometry x="20" y="45" width="1140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.uniffi.facade" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.245;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="binding.uniffi" target="rust.facade">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.dart.facade" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.64;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="binding.dart" target="rust.facade">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="binding.desktop.facade" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.89;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="binding.desktop" target="rust.facade">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="layer.kernel" value="L4  Rust Kernel" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;swimlane;rounded=0;startSize=34;collapsible=0;container=1;align=left;spacingLeft=16;spacingTop=0;fontSize=17;fontStyle=1;swimlaneFillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="800" width="1180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="rust.kernel" value="&lt;b&gt;跨端只维护一份核心业务与状态机&lt;/b&gt;&lt;br&gt;连接 / 认证 / 重连 · 消息 / 幂等 / Outbox · ACK / 同步 / 游标 / Inbox&lt;br&gt;会话 / 已读 / 草稿 · 关系 / 群 / 资料 · 媒体 / 搜索 / 设备 / 合规" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.kernel">
+          <mxGeometry x="20" y="46" width="1140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="facade.kernel" value="领域调用 / 事件" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rust.facade" target="rust.kernel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="layer.infrastructure" value="L5  基础设施与平台适配" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;swimlane;rounded=0;startSize=34;collapsible=0;container=1;align=left;spacingLeft=16;spacingTop=0;fontSize=17;fontStyle=1;swimlaneFillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="990" width="1180" height="155" as="geometry" />
+        </mxCell>
+        <mxCell id="rust.infrastructure" value="&lt;b&gt;Rust 默认基础设施&lt;/b&gt;&lt;br&gt;WSS + Protobuf / HTTP + JSON · SQLite / 迁移 / 事务&lt;br&gt;异步运行时 · 文件分片 / 哈希 · TLS · 日志与诊断" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="layer.infrastructure">
+          <mxGeometry x="20" y="49" width="850" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="host.adapters" value="&lt;b&gt;平台 Host 适配&lt;/b&gt;&lt;br&gt;安全存储 / 生命周期 / 推送&lt;br&gt;目录 / 网络状态；由 L1 注入" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;fontSize=15;" vertex="1" parent="layer.infrastructure">
+          <mxGeometry x="890" y="49" width="270" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel.infrastructure" value="通过 Ports" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.373;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rust.kernel" target="rust.infrastructure">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="infrastructure.host" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;dashed=1;dashPattern=6 4;" edge="1" parent="1" source="rust.infrastructure" target="host.adapters">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sdk.js" value="&lt;b&gt;JS / TypeScript SDK&lt;/b&gt;&lt;br&gt;独立实现&lt;br&gt;&lt;br&gt;领域 API / 消息模型&lt;br&gt;连接 / 认证 / 重连&lt;br&gt;消息状态 / 幂等&lt;br&gt;ACK / 同步 / 游标&lt;br&gt;浏览器缓存与生命周期&lt;br&gt;&lt;br&gt;WebSocket / fetch&lt;br&gt;浏览器平台能力&lt;br&gt;&lt;br&gt;与 Rust 对齐：&lt;br&gt;协议 / 模型 / 错误码&lt;br&gt;行为契约 / 一致性用例&lt;br&gt;&lt;br&gt;不依赖 Rust / WASM" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;fontSize=19;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="275" width="360" height="870" as="geometry" />
+        </mxCell>
+        <mxCell id="browser.js" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="host.browser" target="sdk.js">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phantom.platform" value="&lt;b&gt;Phantom Platform&lt;/b&gt;&lt;br&gt;实时网关 WSS / Protobuf  +  用户业务 HTTP / JSON" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1240" width="1600" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rust.platform" value="WSS / HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.278;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rust.infrastructure" target="phantom.platform">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="js.platform" value="WSS / HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#52657a;strokeWidth=1.7;endArrow=blockThin;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#40516a;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8875;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="sdk.js" target="phantom.platform">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="overview.legend" value="绿色：Rust 共享核心  ·  蓝色：平台 API / 独立 JS SDK  ·  紫色：桥接  ·  橙色：平台实现的 Host Ports" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1.5;fontFamily=Helvetica;fontSize=17;fontColor=#24334a;spacing=12;align=center;verticalAlign=middle;fillColor=none;strokeColor=none;align=left;spacing=0;fontSize=15;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1344" width="1600" height="27" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

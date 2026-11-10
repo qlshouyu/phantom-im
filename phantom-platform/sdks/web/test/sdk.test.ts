@@ -110,10 +110,51 @@ describe("PhantomClient", () => {
   });
 
   function newClient() {
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID });
     clients.push(client);
     return client;
   }
+
+  it.each([
+    ["http://test:28080", "http://test:28080", "ws://test:28080/ws"],
+    ["https://test", "https://test", "wss://test/ws"],
+    ["https://test/", "https://test", "wss://test/ws"],
+    ["https://test/gateway/im", "https://test/gateway/im", "wss://test/gateway/im/ws"],
+    ["https://test/gateway/im///", "https://test/gateway/im", "wss://test/gateway/im/ws"],
+  ])("从同一基础地址 %s 构造 WS、HTTP 和媒体请求", async (baseUrl, httpBaseUrl, wsUrl) => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === `${httpBaseUrl}/conversations?limit=200`) {
+        return Response.json({ code: 0, data: { items: [] } });
+      }
+      if (String(input) === `${httpBaseUrl}/media/media_1`) {
+        return Response.json({ code: 0, data: {
+          media_id: "media_1", url: "/media/media_1/content?signature=test",
+        } });
+      }
+      return new Response(new Blob(["media"]));
+    });
+    const client = new PhantomClient({ baseUrl, appId: APP_ID, fetch: fetchMock });
+    clients.push(client);
+    FakeWebSocket.onSend = (ws, env) => {
+      if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
+    };
+    await login(client);
+    expect(FakeWebSocket.instances[0].url).toBe(wsUrl);
+    expect(fetchMock).toHaveBeenCalledWith(`${httpBaseUrl}/conversations?limit=200`, expect.any(Object));
+    fetchMock.mockClear();
+
+    const content = await client.getMediaContent("media_1", "original");
+    expect(await content.text()).toBe("media");
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${httpBaseUrl}/media/media_1`, expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${httpBaseUrl}/media/media_1/content?signature=test`, expect.any(Object));
+  });
+
+  it.each(["ws://test", "wss://test", "ftp://test", "/api/phantom", "invalid", "https://test?token=1", "https://test#fragment"])(
+    "拒绝无效基础地址 %s", (baseUrl) => {
+      expect(() => new PhantomClient({ baseUrl, appId: APP_ID })).toThrow(TypeError);
+      expect(FakeWebSocket.instances).toHaveLength(0);
+    },
+  );
 
   it("token 过期时触发 tokenExpired 回调", async () => {
     const client = newClient();
@@ -428,7 +469,7 @@ describe("PhantomClient", () => {
       if (url.pathname === "/search/suggest") queries.push(url.searchParams.get("q") ?? "");
       return Response.json({ code: 0, data: { contacts: [], groups: [], total: 0 } });
     }) as unknown as typeof fetch;
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
@@ -461,7 +502,7 @@ describe("PhantomClient", () => {
         status: "READY",
       } });
     }) as unknown as typeof fetch;
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
@@ -512,7 +553,7 @@ describe("PhantomClient", () => {
       }
       return Response.json({ code: 0, data: { uploadId: "upload_1", partNumber: 2 } });
     }) as unknown as typeof fetch;
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
@@ -543,7 +584,7 @@ describe("PhantomClient", () => {
       Response.json({ code: 0, data: {
         instant: true, mediaId: "media_file", uploadedParts: [],
       } }));
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock as typeof fetch });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock as typeof fetch });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
@@ -571,7 +612,7 @@ describe("PhantomClient", () => {
       }
       return new Response(new Blob(["thumb"], { type: "image/jpeg" }));
     }) as unknown as typeof fetch;
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);
@@ -591,7 +632,7 @@ describe("PhantomClient", () => {
   it("会话乐观更新失败时发出回滚事件", async () => {
     const fetchMock = vi.fn(async () => Response.json(
       { code: 1001, message: "rejected", data: null }, { status: 400 })) as unknown as typeof fetch;
-    const client = new PhantomClient({ url: "ws://test/ws", appId: APP_ID, fetch: fetchMock });
+    const client = new PhantomClient({ baseUrl: "http://test", appId: APP_ID, fetch: fetchMock });
     clients.push(client);
     FakeWebSocket.onSend = (ws, env) => {
       if (env.cmd === P.Command.COMMAND_AUTH_REQ) authResponse(ws);

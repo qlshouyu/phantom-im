@@ -30,6 +30,12 @@ phantom-im/
 - `phantom-im/clients/pc/` 提供 Tauri 2 桌面客户端，构建时复用 Web 生产产物并内置到安装包。
 - macOS 已完成桌面真实业务链路验收；Windows、Linux x64 已通过 GitHub-hosted CI 的构建、安装和启动验收。
 
+## 第三方 SDK 接入
+
+[HTML 客户端 SDK 集成文档](docs/phantom-platform/sdk/integration.html)提供概述、集成流程、完整 JS API 与 Rust 核心层设计。配套[SDK 接入文档](docs/phantom-platform/sdk/README.md)提供第三方应用接入指南、JS SDK 完整 API、数据模型，以及后续其他语言 SDK 的行为契约和验收清单。参考实现位于 `phantom-platform/sdks/web/`。
+
+JS SDK 当前架构与后续原生 SDK 的共享 Rust Kernel 方案见[客户端 SDK 架构文档](docs/phantom-platform/sdk/architecture.md)，包含分层架构图、职责说明及待确认事项。
+
 ## 本地启动
 
 ### 1. 基础设施

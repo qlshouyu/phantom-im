@@ -179,10 +179,14 @@ test('设备列表可远程下线另一类型 SDK 连接', async ({ page }) => {
       credentials: 'include',
     })).json()
     const module = await import('/node_modules/@phantom/sdk-web/src/index.ts')
+    const baseUrl = runtime.data.ws_url.replace(/^ws/, 'http').replace(/\/ws\/?$/, '').replace(/\/+$/, '')
     const client = new module.PhantomClient({
-      url: runtime.data.ws_url,
+      baseUrl,
       appId: runtime.data.app_id,
-      httpBaseUrl: '/api/phantom',
+      fetch: (input: string | URL | Request, init?: RequestInit) => {
+        const path = String(input).slice(baseUrl.length)
+        return fetch(`${runtime.data.proxy_base_url.replace(/\/+$/, '')}${path}`, init)
+      },
     })
     await client.login({
       userToken: token.data.user_token,
