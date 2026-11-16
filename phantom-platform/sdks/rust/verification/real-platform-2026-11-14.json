@@ -1,0 +1,964 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-14",
+  "change": "add-rust-sdk-and-test-cli",
+  "environment": {
+    "host": "macOS arm64",
+    "platform_base_url": "http://127.0.0.1:28080",
+    "bff_base_url": "http://127.0.0.1:28090",
+    "authentication": "三个用户提供的测试账号通过 BFF 正常登录取得短期 UserToken；SDK 和 CLI 只接收私有 Token 文件引用。双账号 smoke 使用其中两个账号，专用群使用三个账号。"
+  },
+  "commands": {
+    "smoke": "phantom-sdk-cli --timeout-ms 120000 smoke --config <PRIVATE_ACCEPTANCE_DIR>/smoke-config.json",
+    "scenario": "phantom-sdk-cli --timeout-ms 120000 scenario <PRIVATE_ACCEPTANCE_DIR>/scenario-<name>-input.json",
+    "groups_three_clients": "phantom-sdk-cli --timeout-ms 120000 scenario <PRIVATE_ACCEPTANCE_DIR>/scenario-groups-three-client-input.json"
+  },
+  "smoke": {
+    "ok": true,
+    "exit_code": 0,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "elapsed_ms": "5671",
+    "steps": [
+      {
+        "id": "login_ready",
+        "status": "passed",
+        "elapsed_ms": "325"
+      },
+      {
+        "id": "send_receive",
+        "status": "passed",
+        "elapsed_ms": "5270"
+      },
+      {
+        "id": "idempotency",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "history",
+        "status": "passed",
+        "elapsed_ms": "36"
+      },
+      {
+        "id": "offline_send",
+        "status": "passed",
+        "elapsed_ms": "17"
+      },
+      {
+        "id": "restart_restore",
+        "status": "passed",
+        "elapsed_ms": "19"
+      }
+    ]
+  },
+  "scenarios": {
+    "relations": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "17"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "141"
+        },
+        {
+          "id": "1_get_user_profile",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "2_list_friends",
+          "status": "passed",
+          "elapsed_ms": "5"
+        },
+        {
+          "id": "3_list_friend_requests",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "4_list_friend_groups",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "5_list_blacklist",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "6_get_relation_settings",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "7_get_qr_card",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "8_scan_qr_card",
+          "status": "passed",
+          "elapsed_ms": "16"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "1"
+        }
+      ]
+    },
+    "groups": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "77"
+        },
+        {
+          "id": "1_list_groups",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "2_get_group",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "3_list_group_members",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "4_get_announcement",
+          "status": "passed",
+          "elapsed_ms": "6"
+        },
+        {
+          "id": "5_create_group_invite",
+          "status": "passed",
+          "elapsed_ms": "6"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "1"
+        }
+      ]
+    },
+    "media": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "167"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "196"
+        },
+        {
+          "id": "1_get_media",
+          "status": "passed",
+          "elapsed_ms": "4"
+        },
+        {
+          "id": "2_get_media_content",
+          "status": "passed",
+          "elapsed_ms": "36"
+        },
+        {
+          "id": "verify_original_bytes",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "4"
+        }
+      ]
+    },
+    "devices": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "14"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "79"
+        },
+        {
+          "id": "1_list_devices",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "2_get_push_settings",
+          "status": "passed",
+          "elapsed_ms": "2"
+        },
+        {
+          "id": "3_get_privacy_links",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "4_subscribe_presence",
+          "status": "passed",
+          "elapsed_ms": "1"
+        },
+        {
+          "id": "5_unsubscribe_presence",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "6_set_app_state",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "7_handle_notification_click",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "0"
+        }
+      ]
+    },
+    "search": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "12"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "79"
+        },
+        {
+          "id": "1_search",
+          "status": "passed",
+          "elapsed_ms": "30"
+        },
+        {
+          "id": "2_search_suggestions",
+          "status": "passed",
+          "elapsed_ms": "8"
+        },
+        {
+          "id": "3_search_conversation",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "1"
+        }
+      ]
+    },
+    "compliance": {
+      "ok": true,
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "9"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "77"
+        },
+        {
+          "id": "1_list_reports",
+          "status": "passed",
+          "elapsed_ms": "10"
+        },
+        {
+          "id": "2_list_appeals",
+          "status": "passed",
+          "elapsed_ms": "4"
+        },
+        {
+          "id": "3_get_account_exports",
+          "status": "passed",
+          "elapsed_ms": "8"
+        },
+        {
+          "id": "close_events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "shutdown",
+          "status": "passed",
+          "elapsed_ms": "1"
+        }
+      ]
+    }
+  },
+  "omissions": [
+    {
+      "scenario": "compliance",
+      "method": "set_minor_mode",
+      "status": "skipped",
+      "reason": "当前账号未成年人模式没有公开读取接口，无法确保恢复原设置；本次仅执行合规查询。"
+    }
+  ],
+  "fixtures": {
+    "media": {
+      "type": "File",
+      "size_bytes": 53,
+      "status": "READY",
+      "content_assertion": "下载内容与本轮专用上传字节完全相同；没有发送给其他用户。"
+    },
+    "group": {
+      "authorized_accounts": 3,
+      "members_already_friends_of_owner": true,
+      "created_with_three_members": true,
+      "announcement_published": true,
+      "rejoin_flow": [
+        "LEFT",
+        "PENDING",
+        "ACCEPTED",
+        "3 active members"
+      ],
+      "dissolved": true,
+      "cleanup_checks": {
+        "a": true,
+        "b": true,
+        "c": true
+      },
+      "existing_group_announcements_modified": false,
+      "previous_test_groups_also_cleaned": true
+    }
+  },
+  "limitations": [
+    "合规查询场景通过；未成年人模式写操作因无法读取和恢复原设置而单列未执行，不计为通过。",
+    "Failed/resend 和 full_resync 仅引用受控测试，不声称真实服务触发这些分支。",
+    "真实领域场景验证所列调用与权限前提，不代表 103 项公开方法都在真实平台逐一执行。"
+  ],
+  "controlled_tests": {
+    "passed": 131,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 38,
+    "fmt": "passed",
+    "clippy": "passed",
+    "build": "passed"
+  },
+  "previous_attempts": {
+    "groups_missing_announcement": {
+      "ok": false,
+      "exit_code": 1,
+      "passed": 7,
+      "failed": 1,
+      "skipped": 3,
+      "steps": [
+        {
+          "id": "client",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "events",
+          "status": "passed",
+          "elapsed_ms": "0"
+        },
+        {
+          "id": "login",
+          "status": "passed",
+          "elapsed_ms": "7"
+        },
+        {
+          "id": "ready",
+          "status": "passed",
+          "elapsed_ms": "95"
+        },
+        {
+          "id": "1_list_groups",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "2_get_group",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "3_list_group_members",
+          "status": "passed",
+          "elapsed_ms": "3"
+        },
+        {
+          "id": "4_get_announcement",
+          "status": "failed",
+          "elapsed_ms": "10",
+          "error": {
+            "kind": "Business",
+            "message": "群公告不存在",
+            "server_code": 1001,
+            "http_status": 400,
+            "outcome": "Rejected"
+          }
+        },
+        {
+          "id": "5_create_group_invite",
+          "status": "skipped",
+          "reason": "前序必需步骤失败"
+        },
+        {
+          "id": "close_events",
+          "status": "skipped",
+          "reason": "前序必需步骤失败"
+        },
+        {
+          "id": "shutdown",
+          "status": "skipped",
+          "reason": "前序必需步骤失败"
+        }
+      ],
+      "error": {
+        "kind": "Business",
+        "message": "群公告不存在",
+        "server_code": 1001,
+        "http_status": 400,
+        "outcome": "Rejected"
+      }
+    },
+    "group_rejoin_assumed_direct_join": {
+      "result": {
+        "ok": false,
+        "exit_code": 5,
+        "passed": 25,
+        "failed": 1,
+        "skipped": 7,
+        "steps": [
+          {
+            "id": "a",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "a_login",
+            "status": "passed",
+            "elapsed_ms": "8"
+          },
+          {
+            "id": "a_ready",
+            "status": "passed",
+            "elapsed_ms": "82"
+          },
+          {
+            "id": "b",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "b_login",
+            "status": "passed",
+            "elapsed_ms": "5"
+          },
+          {
+            "id": "b_ready",
+            "status": "passed",
+            "elapsed_ms": "69"
+          },
+          {
+            "id": "c",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "c_login",
+            "status": "passed",
+            "elapsed_ms": "9"
+          },
+          {
+            "id": "c_ready",
+            "status": "passed",
+            "elapsed_ms": "101"
+          },
+          {
+            "id": "b_events",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "c_events",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "member_announcement",
+            "status": "passed",
+            "elapsed_ms": "6"
+          },
+          {
+            "id": "announcement_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "group_send",
+            "status": "passed",
+            "elapsed_ms": "27"
+          },
+          {
+            "id": "b_received",
+            "status": "passed",
+            "elapsed_ms": "5059"
+          },
+          {
+            "id": "b_message_id_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "b_conversation_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "c_received",
+            "status": "passed",
+            "elapsed_ms": "2"
+          },
+          {
+            "id": "c_message_id_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "c_conversation_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "member_history",
+            "status": "passed",
+            "elapsed_ms": "21"
+          },
+          {
+            "id": "history_message_matches",
+            "status": "passed",
+            "elapsed_ms": "0"
+          },
+          {
+            "id": "new_invite",
+            "status": "passed",
+            "elapsed_ms": "9"
+          },
+          {
+            "id": "member_leave",
+            "status": "passed",
+            "elapsed_ms": "16"
+          },
+          {
+            "id": "member_rejoin",
+            "status": "passed",
+            "elapsed_ms": "14"
+          },
+          {
+            "id": "rejoin_succeeded",
+            "status": "failed",
+            "elapsed_ms": "0",
+            "error": {
+              "kind": "Conflict",
+              "message": "步骤 rejoin_succeeded 断言不满足",
+              "server_code": null,
+              "http_status": null,
+              "outcome": "NotSubmitted"
+            }
+          },
+          {
+            "id": "group_after_rejoin",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "three_members_restored",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "close_b",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "close_c",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "shutdown_a",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "shutdown_b",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          },
+          {
+            "id": "shutdown_c",
+            "status": "skipped",
+            "reason": "前序必需步骤失败"
+          }
+        ],
+        "error": {
+          "kind": "Conflict",
+          "message": "步骤 rejoin_succeeded 断言不满足",
+          "server_code": null,
+          "http_status": null,
+          "outcome": "NotSubmitted"
+        }
+      },
+      "resolution": "新建群默认启用邀请审批，真实 join 返回 PENDING；扩展场景改为由群主审批并验证 ACCEPTED 和成员恢复。首轮专用群已解散并核对三个账号列表。"
+    },
+    "nullable_request_id_preflight": {
+      "result": {
+        "ok": false,
+        "exit_code": 2,
+        "error": {
+          "kind": "InvalidArgument",
+          "message": "输入与方法类型不匹配，请查询 schema；未知字段、无效枚举和越界数值均被拒绝",
+          "server_code": null,
+          "http_status": null,
+          "outcome": "NotSubmitted"
+        }
+      },
+      "resolution": "修复 CLI 对可空申请 ID 引用的预检样例选择；执行时继续校验真实值。第二轮专用群已解散并核对三个账号列表。"
+    }
+  },
+  "group_three_clients": {
+    "ok": true,
+    "exit_code": 0,
+    "passed": 35,
+    "failed": 0,
+    "skipped": 0,
+    "steps": [
+      {
+        "id": "a",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "a_login",
+        "status": "passed",
+        "elapsed_ms": "5"
+      },
+      {
+        "id": "a_ready",
+        "status": "passed",
+        "elapsed_ms": "74"
+      },
+      {
+        "id": "b",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "b_login",
+        "status": "passed",
+        "elapsed_ms": "5"
+      },
+      {
+        "id": "b_ready",
+        "status": "passed",
+        "elapsed_ms": "71"
+      },
+      {
+        "id": "c",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "c_login",
+        "status": "passed",
+        "elapsed_ms": "8"
+      },
+      {
+        "id": "c_ready",
+        "status": "passed",
+        "elapsed_ms": "77"
+      },
+      {
+        "id": "b_events",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "c_events",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "member_announcement",
+        "status": "passed",
+        "elapsed_ms": "8"
+      },
+      {
+        "id": "announcement_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "group_send",
+        "status": "passed",
+        "elapsed_ms": "28"
+      },
+      {
+        "id": "b_received",
+        "status": "passed",
+        "elapsed_ms": "5064"
+      },
+      {
+        "id": "b_message_id_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "b_conversation_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "c_received",
+        "status": "passed",
+        "elapsed_ms": "7"
+      },
+      {
+        "id": "c_message_id_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "c_conversation_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "member_history",
+        "status": "passed",
+        "elapsed_ms": "8"
+      },
+      {
+        "id": "history_message_matches",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "new_invite",
+        "status": "passed",
+        "elapsed_ms": "7"
+      },
+      {
+        "id": "member_leave",
+        "status": "passed",
+        "elapsed_ms": "11"
+      },
+      {
+        "id": "member_rejoin",
+        "status": "passed",
+        "elapsed_ms": "6"
+      },
+      {
+        "id": "rejoin_pending_approval",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "approve_rejoin",
+        "status": "passed",
+        "elapsed_ms": "66"
+      },
+      {
+        "id": "rejoin_succeeded",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "group_after_rejoin",
+        "status": "passed",
+        "elapsed_ms": "6"
+      },
+      {
+        "id": "three_members_restored",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "close_b",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "close_c",
+        "status": "passed",
+        "elapsed_ms": "0"
+      },
+      {
+        "id": "shutdown_a",
+        "status": "passed",
+        "elapsed_ms": "2"
+      },
+      {
+        "id": "shutdown_b",
+        "status": "passed",
+        "elapsed_ms": "1"
+      },
+      {
+        "id": "shutdown_c",
+        "status": "passed",
+        "elapsed_ms": "1"
+      }
+    ]
+  },
+  "status": {
+    "openspec_tasks_complete": 68,
+    "openspec_tasks_total": 68,
+    "applicable_domain_scenarios_passed": 6,
+    "group_baseline_steps_passed": 11,
+    "group_extended_steps_passed": 35,
+    "omissions_recorded": true
+  }
+}

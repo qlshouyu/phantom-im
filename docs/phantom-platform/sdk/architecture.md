@@ -1,6 +1,6 @@
 # Phantom 客户端 SDK 架构文档
 
-> 更新日期：2026-11-10。版本：评审稿 v0.1。本文描述 JS SDK 的当前架构，以及后续原生 SDK 的目标架构；Rust Kernel 和各原生包装层尚未实现。
+> 更新日期：2026-11-14。版本：评审稿 v0.1。本文描述 JS SDK 与原生 SDK 的分层架构。Rust Facade、Kernel、基础设施适配和测试 CLI 已提供仓库源码；平台桥接和各原生包装层尚未实现。
 >
 > “JS SDK”和“原生SDK”为本次要求的两个主体章节。其余章节作为建议结构提供，技术选型和待确定的行为集中列在“待确认事项”，供审阅后确定。
 
@@ -118,7 +118,7 @@ JS SDK 当前使用浏览器全局 WebSocket、fetch、Blob 和 localStorage 等
 
 核心复用范围包括连接认证、重连、消息状态、发送幂等、ACK、同步游标、会话与领域投影、媒体任务等。系统生命周期、通知、推送、安全存储和文件授权保留在平台适配层。
 
-以下是目标设计，尚未存在可供第三方集成的 Rust、Android、Swift 或 Flutter SDK 产物。
+以下分层中，Rust 核心与默认适配已在 [Rust workspace](../../../phantom-platform/sdks/rust/README.md) 实现，可使用仓库 path 依赖；Android、Swift、Flutter 包装和发布产物仍待实施。
 
 ### 总体分层架构图
 
@@ -331,3 +331,9 @@ phantom-platform/sdks/
 | A8 | 发布与兼容矩阵 | 确定平台包发布方式、Kernel 版本关联、协议兼容范围和验收门槛 |
 
 原生部分的扩展设计可继续查阅[客户端 SDK 分层架构设计草案](../architecture/2026-11-09-client-sdk-layered-architecture.md)。后续以本文作为 JS 与原生 SDK 的统一架构入口，接口细节和协议要求分别维护在对应参考文档中。
+
+## Rust 核心实施状态（2026-11-14）
+
+仓库以 domain、ports、core、protocol、transport、store、runtime、sdk 和 CLI 九个 crate 落实依赖方向；CLI 仅通过公开 Facade 调用业务。状态变更经实例队列提交；HTTP 请求、普通发送和媒体传输的网络等待释放队列，完成后验证 epoch/generation 并归并状态。媒体和同步用例共享调用截止时间与取消上下文。
+
+存储通过公开 StoreFactory/Store 注入，回调适配使用相同契约。ClientOptions.storage 留空时选择 SQLite；也可显式目录、Memory 或 Custom。消息、HTTP 历史、Inbox/Outbox、投影和游标原子提交后才 ACK；自定义后端不依赖 SQLite 表结构，迁移和持久性由宿主负责。公开入口、示例与证据见 [API 覆盖清单](../../../phantom-platform/sdks/rust/api-coverage.md) 和 [验证记录](../../../phantom-platform/sdks/rust/verification.md)。本机受控测试通过不代表真实平台所有功能、其他宿主平台或语言绑定均已验收。

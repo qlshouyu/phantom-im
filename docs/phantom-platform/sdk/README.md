@@ -4,14 +4,15 @@
 
 核对日期：2026-11-09。当前参考包：`@phantom/sdk-web@0.1.0`，协议：`phantom.v1` / `Envelope.version = 1`。接口与行为来自仓库当前实现；不代表 npm 公共仓库发布状态或某个线上环境的部署状态。
 
-HTML 集成入口：[客户端 SDK 集成文档](integration.html)。文档包含概述、集成流程、JS SDK 完整接口与 Rust 核心层设计，并为 Android、iOS 和 Flutter 保留后续章节。JS API 以 HTML 中的“完整 API 参考”为维护入口。
+HTML 集成入口：[客户端 SDK 集成文档](integration.html)。文档包含概述、集成流程、JS SDK 完整接口与Rust核心层SDK 公开接口与源码接入，并为 Android、iOS 和 Flutter 保留后续章节。JS API 以 HTML 中的“完整 API 参考”为维护入口。
 
 ## 阅读顺序
 
 | 文档 | 解决的问题 |
 | --- | --- |
-| [HTML 客户端 SDK 集成文档](integration.html) | 统一阅读入口，含流程、完整 JS API、数据模型与 Rust 核心设计 |
+| [HTML 客户端 SDK 集成文档](integration.html) | 统一阅读入口，含对接流程、完整 JS API 与出入参数、数据模型及各端 SDK 接入状态 |
 | [第三方应用接入指南](getting-started.md) | 服务端准备、UserToken、引入 SDK、登录、收发消息、历史分页、媒体和退出 |
+| [Rust核心层SDK 公开接口](integration.html#rust-core) | Rust workspace 源码接入、公开方法、入参、出参、错误、事件、可选存储和测试 CLI；未发布公共包 |
 | [JS SDK API 参考](integration.html#js-api) | 所有公开方法的参数、默认值、返回、事件、HTTP / WebSocket 映射与错误处理 |
 | [数据模型与消息内容](data-models.md) | SDK 类型、HTTP 数据结构、消息内容、字段命名和分页格式 |
 | [跨语言 SDK 行为契约](cross-language-contract.md) | 协议实现、状态、幂等、ACK、同步、缓存、兼容规则、实现差异与验收清单 |
@@ -21,7 +22,7 @@ HTML 集成入口：[客户端 SDK 集成文档](integration.html)。文档包�
 
 ## 客户端 SDK 架构设计
 
-[客户端 SDK 架构文档](architecture.md)作为统一架构入口，包含“JS SDK”和“原生SDK”两个主体章节，说明 JS 当前实现，以及原生客户端共享 Rust Kernel、使用 Kotlin / Swift / Dart 或桌面宿主包装的目标设计。原生章节包含总体分层图、Kernel 内部图及逐层说明；共享契约、工程发布和实施验收等额外章节供评审确定，原生目标架构尚未实现。
+[客户端 SDK 架构文档](architecture.md)作为统一架构入口，包含“JS SDK”和“原生SDK”两个主体章节，说明 JS 当前实现，以及原生客户端共享 Rust Kernel、使用 Kotlin / Swift / Dart 或桌面宿主包装的目标设计。原生章节包含总体分层图、Kernel 内部图及逐层说明；共享契约、工程发布和实施验收等额外章节供评审确定，Rust Facade、Kernel、默认适配和 CLI 已在仓库实现；Kotlin / Swift / Dart 平台包装仍属后续工作。
 
 原生部分的扩展草案见[客户端 SDK 分层架构设计](../architecture/2026-11-09-client-sdk-layered-architecture.md)。
 
@@ -55,3 +56,14 @@ AppSecret 仅用于服务端。SDK 不提供第三方应用的注册、密码登
 - [HTTP 路由清单](../api/mvp-routes.md)：补充查阅平台接口，含尚未封装为 SDK 方法的能力。
 
 变更 SDK 方法、事件、DTO、错误行为或 Protobuf 时，同步维护对应文档。当前 OpenAPI 主要列举路由，不能单独用于生成完整 SDK；跨语言实现需要结合这里的映射、DTO 和 Protobuf。已知实现差异以专表披露，不能作为其他端放宽行为契约的依据。
+
+## Rust SDK 源码与测试入口
+
+Rust 实施与验证更新于 2026-11-14。
+
+- [Rust workspace 与接入/存储示例](../../../phantom-platform/sdks/rust/README.md)
+- [103 项 API、句柄、DTO 与事件覆盖清单](../../../phantom-platform/sdks/rust/api-coverage.md)
+- [CLI 领域场景与前置条件](../../../phantom-platform/sdks/rust/scenarios/README.md)
+- [实际验证记录与真实平台验收限制](../../../phantom-platform/sdks/rust/verification.md)
+
+存储配置可留空，默认 SQLite；也支持显式目录、Memory、使用者提供的 StoreFactory/Store 或回调适配。所有路径使用同一原子存储契约，自定义后端由宿主管理持久性和迁移。

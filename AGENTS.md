@@ -5,6 +5,13 @@
 - 对话、提交说明和新增文档默认使用中文。
 - 不确定的内容不得臆测或猜测，应先向用户确认。
 
+## 项目知识库
+
+- 当前项目的私有知识库目录：`/Users/lugao2/.local/share/codex-private/knowledge/phantom-im`，先读取其中的 `README.md` 查找资料。
+- 测试账号保存在该目录的 `test-accounts.json`。后续登录、SDK/CLI 验收等需要账号时，先读取此文件，避免重复询问；使用文件中原样记录的用户名，不自行纠正拼写。
+- 凭据仅保存在仓库外的私有知识库；目录权限为 `0700`，凭据文件权限为 `0600`。不要将密码或 UserToken 复制到仓库、报告、提交说明或对话输出；需要传递 Token 时使用私有文件或环境变量引用。
+- 开发服务器资料仍读取全局知识库中的 `development-servers.json`，开发机条目为 `servers.dev-34`，优先使用已有 SSH 密钥。
+
 ## 项目结构与模块组织
 
 - `phantom-platform/server/`：JDK 21 Spring Boot Maven 聚合工程。共享契约位于 `phantom-common` 和 `phantom-service-api`；基础设施 starter 位于 `phantom-infra/*`；业务服务位于 `phantom-services/*`；装配入口位于 `phantom-launchers/phantom-boot-monolith`。

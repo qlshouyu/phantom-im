@@ -1,0 +1,108 @@
+{
+  "steps": [
+    {
+      "op": "client/new",
+      "id": "client",
+      "config": {
+        "base_url": "https://phantom.example.test",
+        "app_id": "example-app",
+        "user_id": "example-user",
+        "device_id": "rust-domain-scenario",
+        "token_env": "PHANTOM_USER_TOKEN",
+        "storage": "memory"
+      }
+    },
+    {
+      "op": "subscribe",
+      "id": "events",
+      "client": "client",
+      "capacity": 256
+    },
+    {
+      "op": "call",
+      "id": "login",
+      "client": "client",
+      "method": "login",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "ready",
+      "client": "client",
+      "method": "wait_ready",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "1_get_user_profile",
+      "client": "client",
+      "method": "get_user_profile",
+      "params": {
+        "user_id": null
+      }
+    },
+    {
+      "op": "call",
+      "id": "2_list_friends",
+      "client": "client",
+      "method": "list_friends",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "3_list_friend_requests",
+      "client": "client",
+      "method": "list_friend_requests",
+      "params": {
+        "include_handled": true
+      }
+    },
+    {
+      "op": "call",
+      "id": "4_list_friend_groups",
+      "client": "client",
+      "method": "list_friend_groups",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "5_list_blacklist",
+      "client": "client",
+      "method": "list_blacklist",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "6_get_relation_settings",
+      "client": "client",
+      "method": "get_relation_settings",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "7_get_qr_card",
+      "client": "client",
+      "method": "get_qr_card",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "8_scan_qr_card",
+      "client": "client",
+      "method": "scan_qr_card",
+      "params": {
+        "token": "REPLACE_WITH_VALID_QR_TOKEN"
+      }
+    },
+    {
+      "op": "close_subscription",
+      "id": "close_events",
+      "subscription": "events"
+    },
+    {
+      "op": "shutdown",
+      "id": "shutdown",
+      "client": "client"
+    }
+  ]
+}

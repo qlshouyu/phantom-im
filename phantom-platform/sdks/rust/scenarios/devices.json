@@ -1,0 +1,111 @@
+{
+  "steps": [
+    {
+      "op": "client/new",
+      "id": "client",
+      "config": {
+        "base_url": "https://phantom.example.test",
+        "app_id": "example-app",
+        "user_id": "example-user",
+        "device_id": "rust-domain-scenario",
+        "token_env": "PHANTOM_USER_TOKEN",
+        "storage": "memory"
+      }
+    },
+    {
+      "op": "subscribe",
+      "id": "events",
+      "client": "client",
+      "capacity": 256
+    },
+    {
+      "op": "call",
+      "id": "login",
+      "client": "client",
+      "method": "login",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "ready",
+      "client": "client",
+      "method": "wait_ready",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "1_list_devices",
+      "client": "client",
+      "method": "list_devices",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "2_get_push_settings",
+      "client": "client",
+      "method": "get_push_settings",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "3_get_privacy_links",
+      "client": "client",
+      "method": "get_privacy_links",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "4_subscribe_presence",
+      "client": "client",
+      "method": "subscribe_presence",
+      "params": {
+        "user_ids": [
+          "example-peer"
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "id": "5_unsubscribe_presence",
+      "client": "client",
+      "method": "unsubscribe_presence",
+      "params": {
+        "user_ids": [
+          "example-peer"
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "id": "6_set_app_state",
+      "client": "client",
+      "method": "set_app_state",
+      "params": {
+        "foreground": true
+      }
+    },
+    {
+      "op": "call",
+      "id": "7_handle_notification_click",
+      "client": "client",
+      "method": "handle_notification_click",
+      "params": {
+        "input": {
+          "data": {
+            "conv_id": "si_example-peer__example-user"
+          }
+        }
+      }
+    },
+    {
+      "op": "close_subscription",
+      "id": "close_events",
+      "subscription": "events"
+    },
+    {
+      "op": "shutdown",
+      "id": "shutdown",
+      "client": "client"
+    }
+  ]
+}

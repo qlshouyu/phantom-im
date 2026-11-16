@@ -1,0 +1,595 @@
+{
+  "forward": {
+    "msg_id": null,
+    "target_msg_ids": [
+      "id"
+    ]
+  },
+  "delete_local": null,
+  "clear_history": null,
+  "history": {
+    "items": [],
+    "next_cursor": 0,
+    "has_more": false
+  },
+  "init_upload": {
+    "upload_id": "id",
+    "part_size": 1,
+    "size_bytes": 9007199254740993,
+    "total_parts": 1,
+    "uploaded_parts": [
+      1
+    ],
+    "instant": false,
+    "media_id": "id",
+    "url": "id",
+    "thumb_url": "id"
+  },
+  "upload_part": {
+    "upload_id": "id",
+    "part_number": 1,
+    "etag": "id",
+    "size_bytes": 9007199254740993
+  },
+  "get_media": {
+    "media_id": "id",
+    "media_type": "FILE",
+    "mime_type": "application/octet-stream",
+    "size_bytes": 9007199254740993,
+    "url": "id",
+    "thumb_url": "id",
+    "duration_seconds": 1,
+    "width": 1,
+    "height": 1,
+    "file_name": "id",
+    "status": "READY"
+  },
+  "list_conversations": {
+    "items": [
+      {
+        "conv_id": "id",
+        "conv_type": "GROUP",
+        "target_id": "id",
+        "title": "id",
+        "avatar_url": "id",
+        "last_message_digest": "id",
+        "last_message_at": 9007199254740993,
+        "unread_count": 1,
+        "mention_me": false,
+        "pinned": false,
+        "pinned_at": 9007199254740993,
+        "muted": false,
+        "draft": "id",
+        "draft_edited_at": 9007199254740993,
+        "max_conv_seq": 9007199254740993,
+        "read_conv_seq": 9007199254740993,
+        "read_only": false
+      }
+    ],
+    "next_cursor": "id",
+    "has_more": false,
+    "max_user_seq": 9007199254740993,
+    "badge_count": 1
+  },
+  "get_conversation": {
+    "conv_id": "id",
+    "conv_type": "GROUP",
+    "target_id": "id",
+    "title": "id",
+    "avatar_url": "id",
+    "last_message_digest": "id",
+    "last_message_at": 9007199254740993,
+    "unread_count": 1,
+    "mention_me": false,
+    "pinned": false,
+    "pinned_at": 9007199254740993,
+    "muted": false,
+    "draft": "id",
+    "draft_edited_at": 9007199254740993,
+    "max_conv_seq": 9007199254740993,
+    "read_conv_seq": 9007199254740993,
+    "read_only": false
+  },
+  "update_conversation": {
+    "conv_id": "id",
+    "conv_type": "GROUP",
+    "target_id": "id",
+    "title": "id",
+    "avatar_url": "id",
+    "last_message_digest": "id",
+    "last_message_at": 9007199254740993,
+    "unread_count": 1,
+    "mention_me": false,
+    "pinned": false,
+    "pinned_at": 9007199254740993,
+    "muted": false,
+    "draft": "id",
+    "draft_edited_at": 9007199254740993,
+    "max_conv_seq": 9007199254740993,
+    "read_conv_seq": 9007199254740993,
+    "read_only": false
+  },
+  "delete_conversation": null,
+  "mark_read": {
+    "conv_id": "id",
+    "user_id": "id",
+    "read_conv_seq": 9007199254740993
+  },
+  "get_read_position": {
+    "conv_id": "id",
+    "user_id": "id",
+    "read_conv_seq": 9007199254740993
+  },
+  "save_draft": {
+    "conv_id": "id",
+    "draft": "id",
+    "edited_at": 9007199254740993
+  },
+  "clear_draft": {
+    "conv_id": "id",
+    "draft": "id",
+    "edited_at": 9007199254740993
+  },
+  "handle_message_request": {
+    "conv_id": "id",
+    "conv_type": "GROUP",
+    "target_id": "id",
+    "title": "id",
+    "avatar_url": "id",
+    "last_message_digest": "id",
+    "last_message_at": 9007199254740993,
+    "unread_count": 1,
+    "mention_me": false,
+    "pinned": false,
+    "pinned_at": 9007199254740993,
+    "muted": false,
+    "draft": "id",
+    "draft_edited_at": 9007199254740993,
+    "max_conv_seq": 9007199254740993,
+    "read_conv_seq": 9007199254740993,
+    "read_only": false
+  },
+  "get_user_profile": {
+    "user_id": "id",
+    "app_id": "id",
+    "nickname": "id",
+    "avatar_url": "id",
+    "ext": {
+      "role": "原样",
+      "conv_type": "原样"
+    },
+    "status": "READY"
+  },
+  "update_profile": {
+    "user_id": "id",
+    "app_id": "id",
+    "nickname": "id",
+    "avatar_url": "id",
+    "ext": {
+      "role": "原样",
+      "conv_type": "原样"
+    },
+    "status": "READY"
+  },
+  "list_friends": [
+    {
+      "user_id": "id",
+      "nickname": "id",
+      "avatar_url": "id",
+      "display_name": "id",
+      "remark": "id",
+      "pinned": false,
+      "group_ids": [
+        "id"
+      ]
+    }
+  ],
+  "create_friend_request": {
+    "request_id": "id",
+    "status": "READY",
+    "auto_accepted": false
+  },
+  "list_friend_requests": {
+    "items": [
+      {
+        "request_id": "id",
+        "from_user_id": "id",
+        "to_user_id": "id",
+        "peer": {
+          "user_id": "id",
+          "nickname": "id",
+          "avatar_url": "id"
+        },
+        "verification_message": "id",
+        "status": "READY",
+        "direction": "id",
+        "created_at": 9007199254740993,
+        "handled_at": 9007199254740993,
+        "unread": false
+      }
+    ],
+    "unread_count": 1
+  },
+  "handle_friend_request": {
+    "request_id": "id",
+    "from_user_id": "id",
+    "to_user_id": "id",
+    "peer": {
+      "user_id": "id",
+      "nickname": "id",
+      "avatar_url": "id"
+    },
+    "verification_message": "id",
+    "status": "READY",
+    "direction": "id",
+    "created_at": 9007199254740993,
+    "handled_at": 9007199254740993,
+    "unread": false
+  },
+  "update_friend": {
+    "user_id": "id",
+    "nickname": "id",
+    "avatar_url": "id",
+    "display_name": "id",
+    "remark": "id",
+    "pinned": false,
+    "group_ids": [
+      "id"
+    ]
+  },
+  "delete_friend": null,
+  "list_blacklist": [
+    {
+      "user_id": "id",
+      "nickname": "id",
+      "avatar_url": "id",
+      "created_at": 9007199254740993
+    }
+  ],
+  "block_user": null,
+  "unblock_user": null,
+  "list_friend_groups": [
+    {
+      "group_id": "id",
+      "name": "id",
+      "member_count": 1
+    }
+  ],
+  "create_friend_group": {
+    "group_id": "id",
+    "name": "id",
+    "member_count": 1
+  },
+  "rename_friend_group": {
+    "group_id": "id",
+    "name": "id",
+    "member_count": 1
+  },
+  "delete_friend_group": null,
+  "get_qr_card": {
+    "card_id": "id",
+    "token": "id",
+    "card_url": "id",
+    "expires_at": 9007199254740993
+  },
+  "refresh_qr_card": {
+    "card_id": "id",
+    "token": "id",
+    "card_url": "id",
+    "expires_at": 9007199254740993
+  },
+  "scan_qr_card": {
+    "user": {
+      "user_id": "id",
+      "nickname": "id",
+      "avatar_url": "id",
+      "remark": "id",
+      "friend": false,
+      "blocked_by_me": false
+    }
+  },
+  "get_relation_settings": {
+    "auto_accept_requests": false,
+    "friend_limit": 1
+  },
+  "update_relation_settings": {
+    "auto_accept_requests": false,
+    "friend_limit": 1
+  },
+  "list_groups": [
+    {
+      "group_id": "id",
+      "conv_id": "id",
+      "name": "id",
+      "avatar_url": "id",
+      "member_count": 1,
+      "owner_id": "id",
+      "status": "READY"
+    }
+  ],
+  "create_group": {
+    "group_id": "id",
+    "conv_id": "id",
+    "name": "id",
+    "avatar_url": "id",
+    "member_count": 1,
+    "owner_id": "id",
+    "status": "READY"
+  },
+  "get_group": {
+    "summary": {
+      "group_id": "id",
+      "conv_id": "id",
+      "name": "id",
+      "avatar_url": "id",
+      "member_count": 1,
+      "owner_id": "id",
+      "status": "READY"
+    },
+    "announcement": {
+      "group_id": "id",
+      "content": "id",
+      "operator_id": "id",
+      "version": 9007199254740993
+    },
+    "member_invite_enabled": false,
+    "announcement_unread": false
+  },
+  "update_group": {
+    "summary": {
+      "group_id": "id",
+      "conv_id": "id",
+      "name": "id",
+      "avatar_url": "id",
+      "member_count": 1,
+      "owner_id": "id",
+      "status": "READY"
+    },
+    "announcement": {
+      "group_id": "id",
+      "content": "id",
+      "operator_id": "id",
+      "version": 9007199254740993
+    },
+    "member_invite_enabled": false,
+    "announcement_unread": false
+  },
+  "list_group_members": [
+    {
+      "group_id": "id",
+      "user_id": "id",
+      "role": "OWNER",
+      "group_nickname": "id",
+      "muted_until": 9007199254740993,
+      "muted_all": false
+    }
+  ],
+  "invite_group_members": null,
+  "remove_group_member": null,
+  "update_group_role": null,
+  "transfer_group_owner": {
+    "group_id": "id",
+    "conv_id": "id",
+    "name": "id",
+    "avatar_url": "id",
+    "member_count": 1,
+    "owner_id": "id",
+    "status": "READY"
+  },
+  "leave_group": null,
+  "dissolve_group": null,
+  "mute_group_member": null,
+  "unmute_group_member": null,
+  "get_announcement": {
+    "group_id": "id",
+    "content": "id",
+    "operator_id": "id",
+    "version": 9007199254740993
+  },
+  "update_announcement": {
+    "group_id": "id",
+    "content": "id",
+    "operator_id": "id",
+    "version": 9007199254740993
+  },
+  "update_group_nickname": null,
+  "create_group_invite": {
+    "invite_id": "id",
+    "group_id": "id",
+    "invite_type": "id",
+    "token": "id",
+    "expires_at": 9007199254740993
+  },
+  "join_group_by_invite": {
+    "group_id": "id",
+    "request_id": "id",
+    "status": "READY"
+  },
+  "handle_group_join_request": {
+    "group_id": "id",
+    "request_id": "id",
+    "status": "READY"
+  },
+  "list_devices": [
+    {
+      "device_id": "id",
+      "device_type": 2,
+      "platform": "test",
+      "device_name": "设备",
+      "login_at": 1,
+      "last_active_at": 2,
+      "location": null,
+      "foreground": true
+    }
+  ],
+  "remote_logout": null,
+  "register_push_token": null,
+  "unregister_push_token": null,
+  "get_push_settings": {
+    "push_enabled": true,
+    "preview_enabled": false,
+    "privacy_policy_url": "",
+    "terms_url": ""
+  },
+  "update_push_settings": {
+    "push_enabled": true,
+    "preview_enabled": false,
+    "privacy_policy_url": "",
+    "terms_url": ""
+  },
+  "get_privacy_links": {
+    "push_enabled": true,
+    "preview_enabled": false,
+    "privacy_policy_url": "",
+    "terms_url": ""
+  },
+  "update_privacy_links": {
+    "push_enabled": true,
+    "preview_enabled": false,
+    "privacy_policy_url": "",
+    "terms_url": ""
+  },
+  "search": {
+    "contacts": [
+      {
+        "user_id": "id",
+        "nickname": "id",
+        "remark": "id",
+        "avatar_url": "id"
+      }
+    ],
+    "groups": [
+      {
+        "group_id": "id",
+        "conv_id": "id",
+        "name": "id",
+        "avatar_url": "id"
+      }
+    ],
+    "messages": [
+      {
+        "msg_id": "id",
+        "conv_id": "id",
+        "conv_title": "id",
+        "sender_id": "id",
+        "digest": "id",
+        "conv_seq": 9007199254740993,
+        "server_time": 9007199254740993,
+        "recalled": false,
+        "burned": false
+      }
+    ],
+    "contact_total": 1,
+    "group_total": 1,
+    "message_total": 1
+  },
+  "search_suggestions": {
+    "contacts": [
+      {
+        "user_id": "id",
+        "nickname": "id",
+        "remark": "id",
+        "avatar_url": "id"
+      }
+    ],
+    "groups": [
+      {
+        "group_id": "id",
+        "conv_id": "id",
+        "name": "id",
+        "avatar_url": "id"
+      }
+    ],
+    "total": 1
+  },
+  "search_conversation": {
+    "conv_id": "id",
+    "messages": [
+      {
+        "msg_id": "id",
+        "conv_id": "id",
+        "conv_title": "id",
+        "sender_id": "id",
+        "digest": "id",
+        "conv_seq": 9007199254740993,
+        "server_time": 9007199254740993,
+        "recalled": false,
+        "burned": false
+      }
+    ],
+    "total": 1
+  },
+  "report": {
+    "report_id": "id",
+    "app_id": "id",
+    "reporter_id": "id",
+    "target_type": "id",
+    "target_id": "id",
+    "reason": "id",
+    "description": "id",
+    "snapshot_json": "{\"原样\":true}",
+    "status": "READY",
+    "created_at": 9007199254740993,
+    "updated_at": 9007199254740993
+  },
+  "list_reports": [
+    {
+      "report_id": "id",
+      "app_id": "id",
+      "reporter_id": "id",
+      "target_type": "id",
+      "target_id": "id",
+      "reason": "id",
+      "description": "id",
+      "snapshot_json": "{\"原样\":true}",
+      "status": "READY",
+      "created_at": 9007199254740993,
+      "updated_at": 9007199254740993
+    }
+  ],
+  "submit_appeal": {
+    "appeal_id": "id",
+    "sanction_id": "id",
+    "user_id": "id",
+    "content": "id",
+    "status": "READY",
+    "result": "id",
+    "created_at": 9007199254740993,
+    "updated_at": 9007199254740993
+  },
+  "list_appeals": [
+    {
+      "appeal_id": "id",
+      "sanction_id": "id",
+      "user_id": "id",
+      "content": "id",
+      "status": "READY",
+      "result": "id",
+      "created_at": 9007199254740993,
+      "updated_at": 9007199254740993
+    }
+  ],
+  "export_account": [
+    {
+      "export_id": "id",
+      "app_id": "id",
+      "user_id": "id",
+      "status": "READY",
+      "payload_json": "{\"原样\":9007199254740993}",
+      "created_at": 9007199254740993,
+      "updated_at": 9007199254740993
+    }
+  ],
+  "get_account_exports": [
+    {
+      "export_id": "id",
+      "app_id": "id",
+      "user_id": "id",
+      "status": "READY",
+      "payload_json": "{\"原样\":9007199254740993}",
+      "created_at": 9007199254740993,
+      "updated_at": 9007199254740993
+    }
+  ],
+  "set_minor_mode": null
+}

@@ -1,0 +1,65 @@
+{
+  "steps": [
+    {
+      "op": "client/new",
+      "id": "client",
+      "config": {
+        "base_url": "https://phantom.example.test",
+        "app_id": "example-app",
+        "user_id": "example-user",
+        "device_id": "rust-domain-scenario",
+        "token_env": "PHANTOM_USER_TOKEN",
+        "storage": "memory"
+      }
+    },
+    {
+      "op": "subscribe",
+      "id": "events",
+      "client": "client",
+      "capacity": 256
+    },
+    {
+      "op": "call",
+      "id": "login",
+      "client": "client",
+      "method": "login",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "ready",
+      "client": "client",
+      "method": "wait_ready",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "1_get_media",
+      "client": "client",
+      "method": "get_media",
+      "params": {
+        "media_id": "REPLACE_WITH_READY_MEDIA_ID"
+      }
+    },
+    {
+      "op": "call",
+      "id": "2_get_media_content",
+      "client": "client",
+      "method": "get_media_content",
+      "params": {
+        "media_id": "REPLACE_WITH_READY_MEDIA_ID",
+        "variant": "Original"
+      }
+    },
+    {
+      "op": "close_subscription",
+      "id": "close_events",
+      "subscription": "events"
+    },
+    {
+      "op": "shutdown",
+      "id": "shutdown",
+      "client": "client"
+    }
+  ]
+}

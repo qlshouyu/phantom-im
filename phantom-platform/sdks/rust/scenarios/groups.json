@@ -1,0 +1,90 @@
+{
+  "steps": [
+    {
+      "op": "client/new",
+      "id": "client",
+      "config": {
+        "base_url": "https://phantom.example.test",
+        "app_id": "example-app",
+        "user_id": "example-user",
+        "device_id": "rust-domain-scenario",
+        "token_env": "PHANTOM_USER_TOKEN",
+        "storage": "memory"
+      }
+    },
+    {
+      "op": "subscribe",
+      "id": "events",
+      "client": "client",
+      "capacity": 256
+    },
+    {
+      "op": "call",
+      "id": "login",
+      "client": "client",
+      "method": "login",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "ready",
+      "client": "client",
+      "method": "wait_ready",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "1_list_groups",
+      "client": "client",
+      "method": "list_groups",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "2_get_group",
+      "client": "client",
+      "method": "get_group",
+      "params": {
+        "group_id": "REPLACE_WITH_GROUP_ID"
+      }
+    },
+    {
+      "op": "call",
+      "id": "3_list_group_members",
+      "client": "client",
+      "method": "list_group_members",
+      "params": {
+        "group_id": "REPLACE_WITH_GROUP_ID"
+      }
+    },
+    {
+      "op": "call",
+      "id": "4_get_announcement",
+      "client": "client",
+      "method": "get_announcement",
+      "params": {
+        "group_id": "REPLACE_WITH_GROUP_ID"
+      }
+    },
+    {
+      "op": "call",
+      "id": "5_create_group_invite",
+      "client": "client",
+      "method": "create_group_invite",
+      "params": {
+        "group_id": "REPLACE_WITH_GROUP_ID",
+        "expires_in_seconds": 3600
+      }
+    },
+    {
+      "op": "close_subscription",
+      "id": "close_events",
+      "subscription": "events"
+    },
+    {
+      "op": "shutdown",
+      "id": "shutdown",
+      "client": "client"
+    }
+  ]
+}

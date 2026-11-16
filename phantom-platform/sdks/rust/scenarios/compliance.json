@@ -1,0 +1,80 @@
+{
+  "steps": [
+    {
+      "op": "client/new",
+      "id": "client",
+      "config": {
+        "base_url": "https://phantom.example.test",
+        "app_id": "example-app",
+        "user_id": "example-user",
+        "device_id": "rust-domain-scenario",
+        "token_env": "PHANTOM_USER_TOKEN",
+        "storage": "memory"
+      }
+    },
+    {
+      "op": "subscribe",
+      "id": "events",
+      "client": "client",
+      "capacity": 256
+    },
+    {
+      "op": "call",
+      "id": "login",
+      "client": "client",
+      "method": "login",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "ready",
+      "client": "client",
+      "method": "wait_ready",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "1_list_reports",
+      "client": "client",
+      "method": "list_reports",
+      "params": {
+        "limit": 20
+      }
+    },
+    {
+      "op": "call",
+      "id": "2_list_appeals",
+      "client": "client",
+      "method": "list_appeals",
+      "params": {
+        "appeal_id": null
+      }
+    },
+    {
+      "op": "call",
+      "id": "3_get_account_exports",
+      "client": "client",
+      "method": "get_account_exports",
+      "params": {}
+    },
+    {
+      "op": "call",
+      "id": "4_set_minor_mode",
+      "client": "client",
+      "method": "set_minor_mode",
+      "params": {
+        "enabled": false
+      }
+    },
+    {
+      "op": "close_subscription",
+      "id": "close_events",
+      "subscription": "events"
+    },
+    {
+      "op": "shutdown",
+      "id": "shutdown",
+      "client": "client"
+    }
+  ]
+}

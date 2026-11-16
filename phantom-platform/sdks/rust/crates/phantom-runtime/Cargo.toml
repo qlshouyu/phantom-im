@@ -1,0 +1,13 @@
+[package]
+name = "phantom-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+phantom-domain.workspace = true
+phantom-ports.workspace = true
+tokio.workspace = true
+getrandom.workspace = true
+sha2.workspace = true
