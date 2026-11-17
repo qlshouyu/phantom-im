@@ -2,6 +2,8 @@
 
 Phantom IM 的 Tauri 2 桌面客户端，复用 `../web` 的 React 生产构建产物。桌面工程不维护第二套业务页面、领域逻辑或 SDK 适配器。
 
+多 Claude Code 协同的开发需求见 [PRD 需求文档](../../../docs/phantom-im/agent-collaboration/prd-agent-phantom.md)，技术设计见 [Agent 协同方案](../../../docs/phantom-im/agent-collaboration/design.md)。方案拟在本客户端 Rust 后端托管协同运行时，继续复用现有群聊；当前尚未实现。
+
 ## 架构
 
 ```text
